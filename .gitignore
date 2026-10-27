@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+dist/
+.env
+*.log
+*.bak
+*.bak-*
+.align-backup-*/
+docs/panel.png

@@ -1,0 +1,13 @@
+# dsh-boss-panel — BOSS 直聘求职面板
+#
+# 侧边栏图标行最上方加一个「招聘」入口（order 负数排到最前），
+# 点开是求职面板：待回复线程 / 面试日程 / 沟通统计。
+# 数据读 $DSH_HOME/../.local/share/dsh-data/workstreams/job-search 下的快照 JSON，
+# 也可以显式指定 dataDir。纯读，不写求职数据、不唤醒模型。
+
+- insert:
+    - id: boss-panel
+      name: 'dsh-boss-panel'
+      config:
+        enabled: true
+        # dataDir 省略即用默认 ~/.local/share/dsh-data/workstreams/job-search

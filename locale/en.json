@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "BOSS Job Panel",
+    "description": "Adds a Recruiting entry right below New session in the sidebar. Opens a BOSS Zhipin job-search panel: threads waiting for a reply, interview schedule, recent outreach, and every thread. Read-only over the local job-search snapshots; never wakes the model."
+  }
+}

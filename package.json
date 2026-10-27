@@ -1,0 +1,55 @@
+{
+  "name": "dsh-boss-panel",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "author": "monkey-sking",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monkey-sking/dsh-boss-panel.git"
+  },
+  "homepage": "https://github.com/monkey-sking/dsh-boss-panel#readme",
+  "bugs": {
+    "url": "https://github.com/monkey-sking/dsh-boss-panel/issues"
+  },
+  "scripts": {
+    "test": "node --test \"test/*_test.mjs\""
+  },
+  "description": "DSH 侧边栏 BOSS 直聘求职面板：概览仪表盘 + 面试/会话 Tab，8 状态分类引擎、今日简报、面试日程、详情弹窗",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "boss",
+    "job-search",
+    "panel"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}

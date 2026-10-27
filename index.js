@@ -1,0 +1,1070 @@
+/**
+ * dsh-boss-panel — BOSS 直聘求职面板（宿主半）
+ *
+ * 只读：把 job-search 工作流里的快照 JSON 汇总成一个视图，交给侧边栏面板渲染。
+ * 不写任何求职数据、不调用模型、不触发探针。
+ *
+ * ⚠️ 2026-10-27 起，本文件是分类规则的**唯一权威实现**。
+ * 原离线看板 boss-chat-status.html 及其渲染器 boss_dashboard_render.py 已停用
+ * （重命名为 *.dormant-20261027 留档），探针脚本不再调用它——同一套规则维护两遍
+ * 导致反复分叉，是那天面板状态错乱的主因。回归护栏见 test/classify_test.mjs。
+ *
+ * 数据文件（默认目录 ~/.local/share/dsh-data/workstreams/job-search）：
+ *   boss_threads_all.json    深扫全量快照（2125 条，主表）
+ *   boss_threads.json        探针最新快照（200 条，按 公司+对接人 覆盖主表）
+ *   boss_jev_state.json      公司级状态判定
+ *   interview_schedule.json  面试日程
+ *   contacted.json           已沟通记录（含岗位/薪资/渠道/A-B tag）
+ *   boss_thread_history.json 真实聊天正文（每 10 分钟补抓）
+ *   company_meta.json        公司元信息（行业/规模/融资/城市）
+ *   outsourcing_blacklist.json 外包黑名单
+ *
+ * 客户端走 ctx.connection.fetch 注册的精确路由 /api/boss-panel.rpc，
+ * Connection 的 /api 前缀处理器已做 Host/Origin 围栏与签名 Cookie 鉴权。
+ */
+
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import os from 'node:os'
+
+export const name = 'dsh-boss-panel'
+
+/** 客户端读取面板数据的唯一 HTTP 入口。 */
+export const RPC_PATH = '/api/boss-panel.rpc'
+
+const DEFAULT_DATA_DIR = path.join(
+  os.homedir(),
+  '.local/share/dsh-data/workstreams/job-search',
+)
+
+const messageOf = (error) => (error instanceof Error ? error.message : String(error))
+
+const operationError = (code, message) => Object.assign(new Error(message), { code })
+
+// ---------------------------------------------------------------------------
+// 分类引擎常量（唯一权威实现；改这里跑 node test/classify_test.mjs）
+// ---------------------------------------------------------------------------
+
+/**
+ * 状态展示顺序。
+ * 状态模型见 docs/state-model.md：八个状态归四类（要我做/等对方/不用管/需核对）。
+ * 「已读不回」2026-10-27 已删除：48h 内归「等对方」，超 48h 归「已结束」。
+ */
+export const ORDER = [
+  '待你决定',
+  '待回复',
+  '已约面试',
+  '已面试',
+  '未验证',
+  '等对方',
+  '可静默',
+  '已结束',
+]
+
+/**
+ * 人工复核表 / 人工覆盖（AUDIT、OVR）不写在代码里——那两张表装的是真实公司名和
+ * 逐个会话的求职结论，属于个人数据，仓库是公开的。
+ * 现在从数据目录的 boss-panel-overrides.json 读，格式：
+ *   { "audit":    { "<公司>": ["<状态>", "<理由>"] },
+ *     "override": { "<公司>": ["<状态>", "<建议>"] } }
+ * 文件不存在就两张表都当空——分类引擎退回纯规则判定（正确行为，不是降级）。
+ * 重新生成本机数据见 README「人工复核表」一节。
+ */
+let AUDIT = {}
+let OVR = {}
+
+/** 从数据目录装载 overrides；buildSnapshot/buildDetail 每次入口调一次。 */
+async function loadOverrides(dataDir) {
+  const doc = await readJson(path.join(dataDir, 'boss-panel-overrides.json'), {})
+  const norm = (table) => {
+    const out = {}
+    if (!table || typeof table !== 'object') return out
+    for (const [company, pair] of Object.entries(table)) {
+      if (!Array.isArray(pair) || typeof pair[0] !== 'string') continue
+      out[company] = [pair[0], typeof pair[1] === 'string' ? pair[1] : '']
+    }
+    return out
+  }
+  AUDIT = norm(doc.audit)
+  OVR = norm(doc.override)
+}
+
+const REJ =
+  /没有特别适合|没有合适|暂时没有|后续有机会|不太符合|不太匹配|与本阶段|招聘需求不太|不合适|不太合适|不适合|不太适合|不符合|不匹配|不够匹配|不匹配度|匹配度不高|抱歉|对不起|报歉|希望以后|希望未来|未来有|有更合适|有合适的机会|祝您|祝你在BOSS|祝一切顺利|祝求职|祝顺利|暂不|校招|已招满|岗位已|不是特别|暂未匹配|与岗位需求|与我们的需求|和岗位需求|需求不太匹配|申请人数|进入筛选|五个工作日|内部同步|同步给业务|评估中|有消息会|会尽快通知|已收到|简历已收到|收到您的|很遗憾|遗憾地通知|略有偏差|有些偏差|少许偏差|不会推进|暂缓推进|人才储备|储备库|不合适本岗位/
+
+// Unicode word characters keep Chinese acknowledgements from being swallowed as punctuation.
+const ACKFILTER =
+  /^[^\p{L}\p{N}_]{0,4}(嗯+|哦+|好的?|行|收到|了解|明白|可以|ok|OK|谢谢|感谢|辛苦了|[\[［].{0,8}[\]］]|嗯+\s*理解|打扰啦|谢谢您|好)[^\p{L}\p{N}_]{0,4}$/u
+
+const PAS =
+  /^\s*(好的|好嘞|OK|ok|收到|行|嗯|了解了)|我整理一下|我先|我这边先|推荐给|反馈给|有后续|再联系|进入(了)?哈|发给(负责人|业务|面试官)/
+
+const BARR = /(需要|要求|必须|需有|要有|最好有|得是).{0,10}背景/
+
+const IRRELEVANT =
+  /快递员|骑手|送餐|外卖员|配送员|司机|网约车|D本|C本|招生顾问|电话销售|保险代理/
+
+/** ACKPASS 2026-10-27：流程告知（我先把简历给用人部门/有反馈再联系你），不是提问，无需回。 */
+const ACKPASS =
+  /(分享|转交|转发|递|推).{0,8}(用人部门|业务部门|业务|部门|面试官)|有(那边)?(的)?反馈.{0,6}(联系|通知)|尽快联系(你|您)|我们(会)?(尽快)?(审核|看看|跟进)/
+
+const BOSS_PLACEHOLDER = /您正在与Boss.{0,12}沟通/
+
+/**
+ * CLOSER 2026-10-27（对方一句「好的呀，感谢关注呢」被挂「待回复」）：
+ * 对方在收尾，不是在提问。ACKFILTER 只认整句客套，这类「客套 + 语气助词」的
+ * 短收尾会漏过来，最后掉进 owed 兜底变「待回复」。
+ *
+ * 实现用「词表 + 尾缀」而不是一条巨长正则：中文收尾词组合太多，正则里任意
+ * [^\p{L}]{0,3} 的缝隙在有 \p{L} 时容易咬错边界（实测「好的呀，感谢关注」会失配）。
+ * 判定 = 短（≤CLOSER_MAX）+ 不含问询 + 去掉首尾标点后，全部由收尾词/尾缀拼成。
+ */
+const CLOSER_HEADS = [
+  '好的呀', '好的', '好嘞', '好滴', '行吧', '行的', '收到', '明白', '了解', '理解',
+  '谢谢', '感谢', '多谢', '打扰啦', '打扰了', '辛苦了', '辛苦您', '辛苦你',
+  '客气', '不客气', '没问题', '可以', '嗯', '哦', 'OK', 'ok',
+]
+const CLOSER_TAILS = [
+  '感谢关注', '感谢支持', '感谢您的关注', '感谢你的关注', '感谢', '谢谢',
+  '祝顺利', '祝您好运', '祝你好运', '顺利', '好运', '早日找到', '找到满意的工作',
+  '合作', '联系', '期待', '等候', '辛苦', '呢', '呀', '哈', '啦', '哦', '的',
+  '您的回复', '你的回复', '沟通', '有时间',
+]
+
+/** 短消息长度上限：超过这个长度不算「一句客套收尾」。 */
+const CLOSER_MAX = 20
+
+/** 收尾判定：短 + 不含问询 + 由收尾词/尾缀拼成。 */
+function isCloser(text) {
+  let t = String(text ?? '').trim().replace(/^[^\p{L}\p{N}_]+|[^\p{L}\p{N}_]+$/gu, '')
+  if (!t || t.length > CLOSER_MAX) return false
+  if (/吗|？|\?|请问|能否|是否|方便|多少|如何|怎么|什么|哪个/.test(t)) return false
+  // 去掉一个前导收尾词；剩余部分必须整体由一个尾缀词表条目拼完。
+  let hit = false
+  for (const head of CLOSER_HEADS) {
+    if (t.startsWith(head)) { t = t.slice(head.length); hit = true; break }
+  }
+  if (!hit) return false
+  t = t.replace(/^[^\p{L}\p{N}_]+/u, '')
+  while (t.length) {
+    const tail = CLOSER_TAILS.find((x) => t.startsWith(x))
+    if (!tail) return false
+    t = t.slice(tail.length).replace(/^[^\p{L}\p{N}_]+/u, '')
+  }
+  return true
+}
+
+/**
+ * SYSTEM_INVITE 2026-10-27（一条系统面试邀请卡片被混在「待回复」）：
+ * BOSS 官方面试邀请/确认接受卡片是**要我点操作**，不是要我打字回复。
+ * 归「待你决定」，让面板把它顶到最上面等人处理。
+ */
+const SYSTEM_INVITE =
+  /邀请您(现场|视频|电话)?面试|前往查看.{0,6}确认是否接受|确认是否接受|面试邀请/
+
+/** contacted.json 里标记「点了但没送达」的 status；不计入今日首触。 */
+const SEND_FAILED = /未成功|未送达|未建立会话|发送失败|失败/
+
+// ---------------------------------------------------------------------------
+// 通用小工具
+// ---------------------------------------------------------------------------
+
+/** 读 JSON；文件不存在或坏了都返回 fallback，不让面板整页报错。 */
+async function readJson(file, fallback) {
+  try {
+    const text = await fs.readFile(file, 'utf8')
+    return JSON.parse(text)
+  } catch {
+    return fallback
+  }
+}
+
+/** 把时间戳统一成 ISO 字符串，容忍秒/毫秒/无时区。 */
+function toIso(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value === 'number') return new Date(value).toISOString()
+  const text = String(value)
+  const parsed = Date.parse(text)
+  if (Number.isFinite(parsed)) return new Date(parsed).toISOString()
+  return null
+}
+
+const pad2 = (n) => String(n).padStart(2, '0')
+
+/** 本地日期 YYYY-MM-DD。 */
+function localDateKey(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+/**
+ * 距今天数。移植自 python days_since()：
+ *   "10:23" → 0（今天）；"昨天" → 1；"前天" → 2；"10-23" → 按当年算，未来则退回上一年。
+ */
+function daysSince(text, today) {
+  const value = String(text ?? '').trim()
+  if (!value) return null
+  if (/^\d{1,2}:\d{2}$/.test(value)) return 0
+  if (value.startsWith('昨天')) return 1
+  if (value.startsWith('前天')) return 2
+  const match = /^(\d{1,2})-(\d{1,2})/.exec(value)
+  if (!match) return null
+  let when = new Date(today.getFullYear(), Number(match[1]) - 1, Number(match[2]))
+  if (Number.isNaN(when.getTime())) return null
+  if (when > today) {
+    when = new Date(when.getFullYear() - 1, when.getMonth(), when.getDate())
+  }
+  return Math.round((today.getTime() - when.getTime()) / 86400000)
+}
+
+/** 每行「下一步」建议。移植自 python nextstep()。 */
+function nextStep(state, days, lastFrom) {
+  if (state === '待你决定') return '等你拍板'
+  if (state === '已约面试') return '确认时间地点'
+  if (state === '已面试') return '等结果'
+  if (state === '未验证') return '待下一轮深扫确认'
+  if (state === '待回复') {
+    return days !== null && days <= 1 ? '今天回' : '该跟一句'
+  }
+  if (state === '等对方') {
+    if (days !== null && days >= 3 && days <= 5) return '可轻推一次'
+    if (days !== null && days > 5) return '不必再等'
+    return ''
+  }
+  return ''
+}
+
+/** 面试日期天差；不是合法 YYYY-MM-DD 返回 null。 */
+function interviewDayDiff(dateText, today) {
+  const value = String(dateText ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const [y, m, d] = value.split('-').map(Number)
+  const when = new Date(y, m - 1, d)
+  if (Number.isNaN(when.getTime())) return null
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return Math.round((when.getTime() - base.getTime()) / 86400000)
+}
+
+// ---------------------------------------------------------------------------
+// 归一化
+// ---------------------------------------------------------------------------
+
+function normalizeThread(row) {
+  if (!row || typeof row !== 'object') return null
+  const company = String(row.company ?? '').trim()
+  const who = String(row.name ?? '').trim()
+  if (!company && !who) return null
+  return {
+    company,
+    who,
+    state: String(row.state ?? '').trim(),
+    time: String(row.time ?? '').trim(),
+    delivery: String(row.delivery ?? '').trim(),
+    last: String(row.last ?? '').trim(),
+    lastFrom: String(row.lastFrom ?? '').trim(),
+    owed: row.owed === true,
+    full: String(row.full ?? '').trim(),
+    preview: String(row.preview ?? '').trim(),
+    fresh: row.__fresh === true,
+    unverified: row.__unverified === true,
+  }
+}
+
+function normalizeContact(row) {
+  if (!row || typeof row !== 'object') return null
+  const company = String(row.company ?? '').trim()
+  if (!company) return null
+  return {
+    date: String(row.date ?? '').trim(),
+    company,
+    job: String(row.job ?? '').trim(),
+    recruiter: String(row.recruiter ?? '').trim(),
+    salary: String(row.salary ?? '').trim(),
+    city: String(row.city ?? '').trim(),
+    status: String(row.status ?? '').trim(),
+    tag: String(row.tag ?? '').trim(),
+    channel: String(row.channel ?? '').trim(),
+    note: String(row.note ?? '').trim(),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 快照构建
+// ---------------------------------------------------------------------------
+
+/** 文件级 mtime 缓存：只在 mtime 变化后重读，避免每次请求解析几 MB JSON。 */
+const cache = new Map()
+
+async function readCached(file, fallback) {
+  let stat = null
+  try {
+    stat = await fs.stat(file)
+  } catch {
+    return { value: fallback, mtime: 0, missing: true }
+  }
+  const entry = cache.get(file)
+  if (entry && entry.mtime === stat.mtimeMs) return entry
+  const value = await readJson(file, fallback)
+  const next = { value, mtime: stat.mtimeMs, missing: false }
+  cache.set(file, next)
+  return next
+}
+
+function fileSet(dataDir) {
+  return {
+    threads: path.join(dataDir, 'boss_threads.json'),
+    all: path.join(dataDir, 'boss_threads_all.json'),
+    interview: path.join(dataDir, 'interview_schedule.json'),
+    contacted: path.join(dataDir, 'contacted.json'),
+    jev: path.join(dataDir, 'boss_jev_state.json'),
+    history: path.join(dataDir, 'boss_thread_history.json'),
+    handled: path.join(dataDir, 'boss_handled.json'),
+    meta: path.join(dataDir, 'company_meta.json'),
+    blacklist: path.join(dataDir, 'outsourcing_blacklist.json'),
+    pending: path.join(dataDir, 'boss_pending_decisions.json'),
+  }
+}
+
+/** 黑名单展平成 Set（verified / known_outsourcing_style / companies / names 四个字段）。 */
+function flattenBlacklist(doc) {
+  const out = new Set()
+  if (!doc || typeof doc !== 'object') return out
+  for (const key of ['verified', 'known_outsourcing_style', 'companies', 'names']) {
+    const list = doc[key]
+    if (!Array.isArray(list)) continue
+    for (const item of list) {
+      if (typeof item === 'string' && item) out.add(item)
+      else if (item && typeof item === 'object' && item.name) out.add(String(item.name))
+    }
+  }
+  return out
+}
+
+/**
+ * 「待你拍板」队列：jev 判 review 的草稿不再静默丢弃，落盘排队等人在面板里拍。
+ * 文件格式 {items:[{id,key,company,name,job,reason,conf,draft,addedAt,status,sentAt}]}；
+ * status: pending（待拍）/ sent（已发）/ dismissed（已忽略）。面板只显示 pending。
+ */
+function normalizePending(doc) {
+  const items = Array.isArray(doc?.items) ? doc.items : []
+  const out = []
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const company = String(item.company ?? '').trim()
+    if (!company) continue
+    const status = String(item.status ?? 'pending')
+    if (status !== 'pending') continue
+    const draft = String(item.draft ?? '').trim()
+    if (!draft) continue
+    const name = String(item.name ?? '').trim()
+    out.push({
+      id: String(item.id ?? `${name}|${company}`),
+      key: `${name}|${company}`,
+      company,
+      name,
+      job: String(item.job ?? '').trim(),
+      reason: String(item.reason ?? '').trim(),
+      conf: Number.isFinite(Number(item.conf)) ? Number(item.conf) : null,
+      draft,
+      addedAt: toIso(item.addedAt),
+    })
+  }
+  out.sort((a, b) => String(b.addedAt ?? '').localeCompare(String(a.addedAt ?? '')))
+  return out.slice(0, 40)
+}
+
+/**
+ * 按 公司+对接人 把探针最新行覆盖到深扫主表上，并给命中的行打 fresh 标记。
+ * 未命中探针的旧行清掉 owed，并标记未验证，避免把未覆盖的会话静默藏起来。
+ */
+function mergeFresh(allDoc, freshDoc) {
+  const rows = Array.isArray(allDoc?.rows) ? allDoc.rows.map((r) => ({ ...r })) : []
+  const freshRows = Array.isArray(freshDoc?.rows) ? freshDoc.rows : []
+  const keyOf = (r) => `${String(r.company ?? '').trim()}|${String(r.name ?? '').trim()}`
+  const freshMap = new Map(freshRows.map((r) => [keyOf(r), r]))
+
+  for (const row of rows) {
+    const fresh = freshMap.get(keyOf(row))
+    if (!fresh) {
+      row.owed = false
+      row.__unverified = true
+      continue
+    }
+    row.__fresh = true
+    for (const field of ['last', 'lastFrom', 'delivery', 'owed', 'time', 'full']) {
+      const value = fresh[field]
+      if (value !== undefined && value !== null && value !== '') row[field] = value
+    }
+  }
+
+  // MERGE_PROBE：主表里没有的公司，用探针行补到最前面。
+  const byCompany = new Map(freshRows.map((r) => [String(r.company ?? ''), r]))
+  const known = new Set(rows.map((r) => String(r.company ?? '')))
+  for (const row of rows) {
+    const fresh = byCompany.get(String(row.company ?? ''))
+    if (!fresh) continue
+    for (const field of ['last', 'lastFrom', 'delivery', 'time']) {
+      if (fresh[field]) row[field] = fresh[field]
+    }
+  }
+  for (const [company, fresh] of byCompany) {
+    if (!known.has(company)) rows.unshift({ ...fresh })
+  }
+
+  return { rows, ts: freshDoc?.ts ?? allDoc?.ts ?? null }
+}
+
+/** 公司元信息：先精确匹配，再双向模糊匹配（FUZZMETA）。 */
+function makeMetaLookup(meta) {
+  const table = meta && typeof meta === 'object' ? meta : {}
+  return (company) => {
+    let entry = table[company]
+    if (entry) return entry
+    for (const [key, value] of Object.entries(table)) {
+      if (!key) continue
+      if (String(company).includes(key) || key.includes(String(company))) return value
+    }
+    return {}
+  }
+}
+
+/** 沟通记录索引：公司+对接人 → 最新一条；公司 → 最新一条。 */
+function buildContactIndex(contacts) {
+  const byPair = new Map()
+  const byCompany = new Map()
+  const firstByCompany = new Map()
+  for (const item of contacts) {
+    const company = item.company
+    const recruiter = item.recruiter.split('\u00b7')[0].trim()
+    if (!firstByCompany.has(company)) firstByCompany.set(company, item)
+    if (!item.job) continue
+    if (recruiter) {
+      const key = `${company}\u0000${recruiter}`
+      const prev = byPair.get(key)
+      if (!prev || item.date >= prev.date) byPair.set(key, item)
+    }
+    const prevCompany = byCompany.get(company)
+    if (!prevCompany || item.date >= prevCompany.date) byCompany.set(company, item)
+  }
+  return { byPair, byCompany, firstByCompany }
+}
+
+/**
+ * 构建面板快照。
+ *
+ * @param {{dataDir?: string}} options
+ * @returns {Promise<object>}
+ */
+export async function buildSnapshot(options = {}) {
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  await loadOverrides(dataDir)
+  const files = fileSet(dataDir)
+  const today = options.today instanceof Date ? options.today : new Date()
+  const todayKey = localDateKey(today)
+
+  const [
+    allDoc,
+    freshDoc,
+    interviewDoc,
+    contactedDoc,
+    jevDoc,
+    historyDoc,
+    metaDoc,
+    blacklistDoc,
+    pendingDoc,
+    handledDoc,
+  ] = await Promise.all([
+      readCached(files.all, { rows: [] }),
+      readCached(files.threads, { rows: [] }),
+      readCached(files.interview, { items: [] }),
+      readCached(files.contacted, { entries: [] }),
+      readCached(files.jev, {}),
+      readCached(files.history, { threads: {} }),
+      readCached(files.meta, {}),
+      readCached(files.blacklist, {}),
+      readCached(files.pending, { items: [] }),
+      readCached(files.handled, {}),
+    ])
+
+  const version = [
+    allDoc.mtime,
+    freshDoc.mtime,
+    interviewDoc.mtime,
+    contactedDoc.mtime,
+    jevDoc.mtime,
+    historyDoc.mtime,
+    metaDoc.mtime,
+    blacklistDoc.mtime,
+    pendingDoc.mtime,
+    handledDoc.mtime,
+  ].join('-')
+
+  const merged = mergeFresh(allDoc.value, freshDoc.value)
+  const rows = merged.rows.map(normalizeThread).filter(Boolean)
+
+  const jev = jevDoc.value && typeof jevDoc.value === 'object' ? jevDoc.value : {}
+  const blacklist = flattenBlacklist(blacklistDoc.value)
+  const metaOf = makeMetaLookup(metaDoc.value)
+
+  const interviewsRaw = Array.isArray(interviewDoc.value?.items) ? interviewDoc.value.items : []
+  const interviewByCompany = new Map(
+    interviewsRaw
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => [String(item.company ?? '').trim(), item]),
+  )
+  // APPT 2026-10-27（用户：「要给打电话的那个不算面试吗？」）：
+  // 约「电话沟通/线上初聊」也是面试——同样占用户时间、需要他本人出面应付。
+  // 之前只读 interview_schedule.json，逻辑控股 16:30 那通电话在看板的「已约面试」里是漏的。
+  // 这里把 appointments.json 里已明确约好时间、且没取消/没面完的电话/线上沟通补进 ivm，
+  // 走与线下约面完全相同的「已约面试」分类，不另开状态，避免两边口径再分叉。
+  // 唯一的权威实现；离线看板侧（_appt_items）已于 2026-10-27 停用。
+  const apptDoc = await readCached(path.join(dataDir, 'appointments.json'), { items: [] })
+  const apptItems = Array.isArray(apptDoc.value?.items) ? apptDoc.value.items : []
+  for (const item of apptItems) {
+    if (!item || typeof item !== 'object') continue
+    const kind = String(item.kind ?? item.mode_kind ?? '')
+    if (kind !== 'phone' && kind !== 'online') continue
+    const company = String(item.company ?? '').trim()
+    if (!company || interviewByCompany.has(company)) continue
+    const st = String(item.state ?? '')
+    if (/已取消|已结束|已完成|不去了|取消/.test(st)) continue
+    interviewByCompany.set(company, {
+      company,
+      who: item.who ?? '',
+      job: item.job ?? '',
+      when: item.when ?? '',
+      mode: item.mode ?? '电话沟通',
+      state: st || '已约好时间',
+      next: item.next ?? '',
+    })
+  }
+
+  const contactRows = Array.isArray(contactedDoc.value?.entries) ? contactedDoc.value.entries : []
+  const contacts = contactRows.map(normalizeContact).filter(Boolean)
+  const contactIndex = buildContactIndex(contacts)
+
+  // HANDLED 2026-10-27（用户：「你每次不记录上次的状态吗？」）：
+  //   人工/流程复核过的会话记一条签名（时间|预览前 60 字 + 结论），
+  //   下一轮只要会话没变化就直接沿用结论，不再反复挂待回复、也不再重复判。
+  //   会话里只要有新消息，time/预览必变 → 签名失效 → 自动重新判。
+  const handledMap = new Map()
+  for (const [company, rec] of Object.entries(handledDoc.value || {})) {
+    if (!company || !rec || typeof rec !== 'object') continue
+    handledMap.set(String(company).trim(), rec)
+  }
+
+  // 聊天正文：key 形如「对接人|公司」，取 | 后面那段当公司名；只保留真有消息的。
+  const historyRaw = historyDoc.value?.threads
+  const history = new Map()
+  if (historyRaw && typeof historyRaw === 'object') {
+    for (const [key, value] of Object.entries(historyRaw)) {
+      const company = key.includes('|') ? key.split('|').pop().trim() : key.trim()
+      const msgs = Array.isArray(value?.msgs) ? value.msgs : []
+      if (company && msgs.length) history.set(company, msgs)
+    }
+  }
+
+  // --- 分类引擎（逐行移植 classify()）-------------------------------------
+  const isBlacklisted = (company) => {
+    if (!blacklist.size) return false
+    const text = String(company ?? '')
+    for (const item of blacklist) {
+      if (item && text.includes(item)) return true
+    }
+    return false
+  }
+
+  // 会话签名：与 `boss_mark.py` 写入的格式必须逐字一致（时间|预览前 60 字）。
+  const sigOfRow = (row) =>
+    `${row.time || ''}|${String(row.full || row.last || row.preview || '').slice(0, 60)}`
+
+  const classify = (row) => {
+    const company = row.company
+    // HANDLED：人工复核过的结论优先（比 AUDIT 更细，AUDIT 是公司级、这是「这一次对话」级）。
+    //   会话一变签名就失效，所以不会把新消息压掉。
+    const hrec = handledMap.get(company)
+    if (hrec && hrec.sig && hrec.sig === sigOfRow(row)) return hrec.state || '等对方'
+    // SELFTAIL 2026-10-25：人工覆盖写的是「待你决定」但末条其实是我方且已送达/已读时，
+    // 球在对方，必须降级成「等对方」——否则面板长期挂着假待办（用户会以为有活没干）。
+    // AUDIT（人工复核）优先级高于 OVR：2026-10-27 全量审计的 15 条结论。
+    if (Object.prototype.hasOwnProperty.call(AUDIT, company)) {
+      const audited = AUDIT[company][0]
+      const selfTailAudit = row.lastFrom === '我' && String(row.delivery ?? '').trim() !== ''
+      if (audited === '待你决定' && selfTailAudit) return '等对方'
+      return audited
+    }
+    if (Object.prototype.hasOwnProperty.call(OVR, company)) {
+      const override = OVR[company][0]
+      const selfTail = row.lastFrom === '我' && String(row.delivery ?? '').trim() !== ''
+      if (override === '待你决定' && selfTail) return '等对方'
+      return override
+    }
+    if (isBlacklisted(company)) return '已结束'
+
+    const text = String(row.last || row.full || row.preview || '')
+    const fullText = String(row.full || row.last || row.preview || '')
+
+    // ORDER_FIX：硬规则优先，jev 覆盖次之，owed 兜底。
+    // 2026-10-26 整段上移到 jev 之前：对方明确婉拒/门槛不符/不相关岗位/系统占位符，
+    // 不该被公司级的 jev 旧判定盖住——否则「不太合适」的拒信也会挂成「等对方」。
+    // SELFCARE 2026-10-26：REJ 是照「对方」的话写的，我方末条也可能出现「抱歉/谢谢」，
+    // 不能把我说的话当拒信。末条是我方时交给后面的 jev/owed/已读规则判。
+    if (row.lastFrom !== '我' && REJ.test(fullText)) return '已结束'
+    // SELFCLOSE 2026-10-26：末条是我方主动收尾（「就不占您时间了/祝顺利」），
+    // 会话已经结束，别再挂成「等对方/待回复」。
+    if (
+      row.lastFrom === '我' &&
+      /不占(用)?(您|你)时间|不耽误(您|你)时间|先不打扰|就不打扰|不是我的方向/.test(text)
+    ) {
+      return '已结束'
+    }
+    // 门槛答复：「需要k12背景的」= 对方给了硬门槛且我方不符，不应记「待回复」。
+    if (BARR.test(fullText) && !/吗|？|\?|请问/.test(text)) return '已结束'
+    if (IRRELEVANT.test(text)) return '已结束'
+    // BOSS 占位符「您正在与BossX沟通」是系统消息，不是对方在等我回复。
+    // PLACEHOLDER_OWED 2026-10-27（三起「占位符盖掉真提问」的漏回事故）：
+    // 占位符只是**列表预览**被系统消息顶掉，真实末条往往就在下面（「你好啊，可以聊一聊~」+ 简历请求卡）。
+    // owed 说明列表侧判定有未读 → 必须挂「待回复」逼一次 live 复核，不能就地压成「等对方」。
+    if (BOSS_PLACEHOLDER.test(text)) {
+      return row.owed ? '待回复' : '等对方'
+    }
+    // ACKPASS：「我先把简历分享给用人部门/有反馈会联系你/我们会尽快审核」是流程告知，
+    // owed 会把它误判成欠回复（实测有会话就因此被挂成待回复）。它不是提问，不需要我回。
+    if (row.lastFrom !== '我' && ACKPASS.test(fullText)) return '等对方'
+    // CLOSER 2026-10-27：对方一句客套收尾（「好的呀，感谢关注呢」）不是提问，别用 owed 兜底成待回复。
+    if (row.lastFrom !== '我' && isCloser(fullText)) return '已结束'
+    // SYSTEM_INVITE 2026-10-27：系统面试邀请是「要我点操作」，不是「要我打字回复」。
+    // 必须排在 owed 兜底之前，否则会被算进待回复，和真人提问混在一起没法区分。
+    if (SYSTEM_INVITE.test(fullText)) return '待你决定'
+
+    // JEVSTALE 2026-10-26：jev 是批处理快照（几天才跑一次）。快照说「球在对方」，
+    // 但最新一条其实是对方在问我问题 → 快照已过期，以真实对话为准，别把该我回的
+    // 会话长期压在「等对方」里（例：对方 11:59 问「是否在深圳」，看板仍显示等对方）。
+    const jevState = jev[company]
+    const jevStale =
+      (jevState === '等对方' || jevState === '待回复') &&
+      row.lastFrom === '对方' &&
+      /吗|？|\?|请问|能否|是否|方便|期望|薪资|到岗|面试|接受|同意|确认/.test(text)
+
+    // JEVFIRST：状态以 jev 判定为准，正则只在 jev 没覆盖时兜底。
+    // JEVDEFER 2026-10-27：但 jev「待回复」不能抢在 owed 硬证据之前——jev 是几天才跑一次的
+    // 批处理快照，它说「待回复」时 owed 才是当期权威；反过来 jev 的「已结束/等对方/待你决定」
+    // 是保守判定（对方已收尾/球在对方），可以压过 owed 的粗红点信号。
+    // 事故：明明命中 ACKPASS 了，却被 jev 旧快照「待回复」拉回来。
+    if (
+      jevState &&
+      !jevStale &&
+      ['已结束', '等对方', '待你决定'].includes(jevState)
+    ) {
+      if (jevState === '待你决定' && (daysSince(row.time, today) ?? 0) > 7) return '可静默'
+      return jevState
+    }
+
+    const iv = interviewByCompany.get(company)
+    if (iv) {
+      const blob = `${iv.state ?? ''}|${iv.when ?? ''}`
+      if (blob.includes('已面试') || blob.includes('不合适')) return '已面试'
+      // 「收了简历/转面试官/等反馈」不等于约了面试。
+      const soft = /简历|反馈|待定|未定|等对方/.test(blob)
+      const hard = /\d{1,2}:\d{2}|月\d{1,2}日|周[一二三四五六日]/.test(blob)
+      if (soft && !hard) return '等对方'
+      return '已约面试'
+    }
+
+    if (jevState && row.fresh && !jevStale && jevState !== '待回复') {
+      let state = jevState
+      if (state === '待你决定' && (daysSince(row.time, today) ?? 99) > 7) state = '可静默'
+      // TIGHTEN：jev 的「待你决定」必须带具体可拍板事项。
+      if (
+        state === '待你决定' &&
+        !/面试|简历|时间|地点|地址|薪资|期望|到岗|是否|能不能|方便/.test(text)
+      ) {
+        state = '等对方'
+      }
+      return state
+    }
+    if (jevState && !row.fresh && jevState === '已结束') return '已结束'
+
+    if (
+      row.unverified &&
+      row.lastFrom !== '我' &&
+      !/附件简历|已发送|对方已同意|已发送给对方|\.pdf|点击查看附件|欢迎投递|^收到$|^好的$|^OK/.test(fullText)
+    ) return '未验证'
+
+    if (row.owed) {
+      if (ACKFILTER.test(fullText.trim())) return '已结束'
+      if (/附件简历|已发送给对方|对方已同意/.test(fullText)) return '等对方'
+      if (row.lastFrom === '我') return '等对方'
+      if (/卡学历|要求.{0,8}本科|需要k12背景/.test(fullText)) return '已结束'
+      return '待回复'
+    }
+
+    // ONLYFRESH：只有探针里的新行才配判「待你决定」，旧快照的预览文本不可信。
+    if (!row.fresh) {
+      if (/吗|？|\?|请问|能否|是否|方便|面试|薪资|到岗/.test(text)) {
+        const days = daysSince(row.time, today)
+        if (days !== null && days <= 3 && /吗|？|\?|请问|能否|是否|方便/.test(text)) {
+          return '待你决定'
+        }
+        return '可静默'
+      }
+    }
+
+    if (row.lastFrom === '对方') {
+      if (REJ.test(fullText)) return '已结束'
+      if (ACKFILTER.test(fullText.trim())) return '已结束'
+      if (IRRELEVANT.test(text)) return '已结束'
+      if (/附件简历|同意|已发送|点击预览|\.pdf/.test(text)) return '等对方'
+      if (PAS.test(text)) return '等对方'
+      if (/外派|外包|驻场|派遣|人力外包/.test(text)) return '可静默'
+      // STATEFIX2：婉拒/通知类再细分，别都堆进「待你决定」。
+      if (/不是很相符|不相符|有少许偏差|少许偏差|有偏差/.test(text)) return '已结束'
+      if (/硬性要求.{0,40}才合适|硬性要求.{0,40}合适/.test(text)) return '已结束'
+      if (/会比较有优势|可能投递/.test(text)) return '可静默'
+      if (/通过初筛后会联系|会跟进.{0,10}匹配|岗位比较多|会尽快通知/.test(text)) return '等对方'
+      if (
+        /吗|？|\?|请问|能否|是否|方便|期望|薪资|到岗|面试|接受|同意|确认|简历/.test(text)
+      ) {
+        return '待你决定'
+      }
+      return '可静默'
+    }
+
+    // READ_TIMEOUT 2026-10-27（用户：「已读不回 过48小时，就不用管了。
+    //   就两个状态等回复，超时不管。」）
+    //   我方末条 + 对方已读 + 没回 = 本质还是在等对方回 → 归「等对方」。
+    //   超过 48h（BOSS 时间粒度只到「昨天/前天/日期」，用 days≥2 近似）→ 「已结束」，不再管。
+    if (row.lastFrom === '我' && String(row.delivery ?? '').includes('已读')) {
+      const days = daysSince(row.time, today)
+      if (days !== null && days >= 2) return '已结束'
+    }
+
+    return '等对方'
+  }
+
+  // --- 逐行产出 -----------------------------------------------------------
+  const byState = Object.fromEntries(ORDER.map((state) => [state, 0]))
+  const threads = []
+  for (const row of rows) {
+    const state = classify(row)
+    const days = daysSince(row.time, today)
+    byState[state] = (byState[state] ?? 0) + 1
+
+    const contact = contactIndex.firstByCompany.get(row.company)
+    const pairKey = `${row.company}\u0000${row.who.split('\u00b7')[0].trim()}`
+    const pairContact = contactIndex.byPair.get(pairKey)
+    const job =
+      contact?.job ||
+      pairContact?.job ||
+      contactIndex.byCompany.get(row.company)?.job ||
+      ''
+    const salary = contact?.salary || ''
+
+    threads.push({
+      company: row.company,
+      who: row.who,
+      state,
+      days,
+      next: nextStep(state, days, row.lastFrom),
+      time: row.time,
+      delivery: row.delivery.replace(/[[\]]/g, ''),
+      last: row.last,
+      lastFrom: row.lastFrom,
+      job,
+      salary,
+      fresh: row.fresh,
+    })
+  }
+
+  // 排序：按状态优先级，再按距今天数（越久越靠后）。
+  threads.sort((a, b) => {
+    const rank = ORDER.indexOf(a.state) - ORDER.indexOf(b.state)
+    if (rank !== 0) return rank
+    return (b.days ?? 999) - (a.days ?? 999)
+  })
+
+  // --- 今日 A/B 首触统计 ---------------------------------------------------
+  // SENTONLY: contacted.json 里也有「首触未成功」的记录（点击了但没建立会话）。
+  // 那些不是送达，不能计入今日首触，否则数字看着涨了、会话列表却没有任何新行。
+  const ab = { A: 0, B: 0 }
+  let todayOutreach = 0
+  const failedCompanies = []
+  for (const item of contacts) {
+    if (String(item.date).slice(0, 10) !== todayKey) continue
+    if (SEND_FAILED.test(item.status)) {
+      if (item.company) failedCompanies.push(item.company)
+      continue
+    }
+    todayOutreach += 1
+    if (item.tag === 'A') ab.A += 1
+    else if (item.tag === 'B') ab.B += 1
+  }
+  const todayFailed = failedCompanies.length
+
+  // --- 面试日程 -----------------------------------------------------------
+  const allInterviews = interviewsRaw
+    .filter((item) => item && typeof item === 'object' && String(item.company ?? '').trim())
+    .map((item) => ({
+      company: String(item.company ?? '').trim(),
+      who: String(item.who ?? item.contact ?? '').trim(),
+      job: String(item.job ?? '').trim(),
+      when: String(item.when ?? item.time ?? '').trim(),
+      mode: String(item.mode ?? item.form ?? '').trim(),
+      state: String(item.state ?? '').trim(),
+      next: String(item.next ?? '').trim(),
+      date: String(item.date ?? '').trim(),
+      dayDiff: interviewDayDiff(item.date, today),
+    }))
+    .sort((a, b) => (a.dayDiff ?? 9999) - (b.dayDiff ?? 9999))
+
+  const interviews = allInterviews.filter((item) => item.dayDiff !== null && item.dayDiff >= 0)
+  const pastInterviews = allInterviews.filter((item) => item.dayDiff !== null && item.dayDiff < 0)
+  const lastPast = pastInterviews.length ? pastInterviews[pastInterviews.length - 1] : null
+
+  // --- 最近 14 天首触 -----------------------------------------------------
+  // 只统计真正送达的首触；「首触未成功(未建立会话)」不计入，否则趋势图虚高。
+  const byDate = new Map()
+  for (const item of contacts) {
+    const key = String(item.date).slice(0, 10)
+    if (!key) continue
+    if (SEND_FAILED.test(item.status)) continue
+    byDate.set(key, (byDate.get(key) ?? 0) + 1)
+  }
+  const recentDays = [...byDate.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .slice(0, 14)
+    .map(([date, count]) => ({ date, count }))
+
+  // --- 今日简报 -----------------------------------------------------------
+  const decideRows = threads.filter((item) => item.state === '待你决定')
+  const daily = {
+    decide: decideRows.length,
+    decideCompanies: decideRows.slice(0, 4).map((item) => item.company),
+    // 已读不回桶 2026-10-27 删除，保持字段存在但恒为 0（外部读取方不必改）。
+    readNoReply: 0,
+    todayThreads: threads.filter((item) => item.days === 0).length,
+    todayOutreach,
+    todayFailed,
+    failedCompanies: failedCompanies.slice(0, 6),
+    a: ab.A,
+    b: ab.B,
+  }
+
+  const pending = normalizePending(pendingDoc.value)
+
+  const counts = {
+    threads: threads.length,
+    pending: pending.length,
+    byState,
+    interviews: interviews.length,
+    contacts: contacts.length,
+    todayOutreach,
+    ab,
+  }
+
+  return {
+    version,
+    updatedAt: toIso(merged.ts),
+    dataDir,
+    today: todayKey,
+    counts,
+    daily,
+    filters: ORDER.map((state) => ({ state, count: byState[state] ?? 0 })),
+    threads,
+    interviews,
+    interviewEmptyTail: lastPast
+      ? `最近一次「${lastPast.company}｜${lastPast.job}｜${lastPast.state}」已结束（${
+          lastPast.next || '已收尾'
+        }）`
+      : '',
+    recentDays,
+    pending,
+    contacts: contacts.slice(-80).reverse(),
+  }
+}
+
+/**
+ * 单家公司详情（点开会话行时按需拉取，避免快照里塞几千份详情）。
+ *
+ * @param {string} company
+ * @param {{dataDir?: string}} options
+ */
+/**
+ * 回写「待你拍板」队列的某一条状态（sent / dismissed / pending）。
+ * 只改这一条的 status 与时间戳，其余字段原样保留，避免和 CLI 侧并发写打架。
+ */
+export async function markPending(id, status, options = {}) {
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  const file = fileSet(dataDir).pending
+  const doc = await readJson(file, { items: [] })
+  const items = Array.isArray(doc?.items) ? doc.items : []
+  let hit = null
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const key = String(item.id ?? `${item.name ?? ''}|${item.company ?? ''}`)
+    if (key !== String(id)) continue
+    item.status = status
+    item.decidedAt = new Date().toISOString()
+    hit = item
+  }
+  if (!hit) throw operationError('not_found', `队列里没有这一条：${String(id)}`)
+  await fs.writeFile(file, JSON.stringify({ ...doc, items, ts: new Date().toISOString() }, null, 1))
+  return { ok: true, id: String(id), status }
+}
+
+export async function buildDetail(company, options = {}) {
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  await loadOverrides(dataDir)
+  const files = fileSet(dataDir)
+  const target = String(company ?? '').trim()
+  if (!target) throw operationError('invalid_company', '公司名不能为空')
+
+  const [contactedDoc, metaDoc, historyDoc, threadsDoc] = await Promise.all([
+    readCached(files.contacted, { entries: [] }),
+    readCached(files.meta, {}),
+    readCached(files.history, { threads: {} }),
+    readCached(files.threads, { rows: [] }),
+  ])
+
+  const contactRows = Array.isArray(contactedDoc.value?.entries) ? contactedDoc.value.entries : []
+  const contacts = contactRows.map(normalizeContact).filter(Boolean)
+  const contactIndex = buildContactIndex(contacts)
+  const contact = contactIndex.firstByCompany.get(target) ?? {}
+  const meta = makeMetaLookup(metaDoc.value)(target) ?? {}
+
+  const historyRaw = historyDoc.value?.threads
+  let msgs = []
+  if (historyRaw && typeof historyRaw === 'object') {
+    for (const [key, value] of Object.entries(historyRaw)) {
+      const name = key.includes('|') ? key.split('|').pop().trim() : key.trim()
+      if (name !== target) continue
+      const list = Array.isArray(value?.msgs) ? value.msgs : []
+      msgs = list.map((item) => ({
+        mine: item?.mine === true,
+        text: String(item?.t ?? ''),
+      }))
+      if (msgs.length) break
+    }
+  }
+
+  const probeRows = Array.isArray(threadsDoc.value?.rows) ? threadsDoc.value.rows : []
+  const probeRow = probeRows.find((row) => String(row.company ?? '').trim() === target)
+
+  return {
+    company: target,
+    job: contact.job || '',
+    salary: contact.salary || '',
+    city: contact.city || String(meta.city ?? ''),
+    industry: String(meta.industry ?? ''),
+    scale: String(meta.scale ?? ''),
+    stage: String(meta.stage ?? ''),
+    recruiter: String(probeRow?.name ?? contact.recruiter ?? ''),
+    first: contact.date || '',
+    channel: contact.channel || '',
+    tag: contact.tag || '',
+    note: contact.note || '',
+    advice: Object.prototype.hasOwnProperty.call(OVR, target) ? OVR[target][1] : '',
+    last: String(probeRow?.last ?? ''),
+    lastFrom: String(probeRow?.lastFrom ?? ''),
+    msgs: msgs.slice(-12),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 插件入口
+// ---------------------------------------------------------------------------
+
+export function apply(ctx, config = {}) {
+  if (config.enabled === false) return
+
+  const dataDir = config.dataDir || DEFAULT_DATA_DIR
+
+  const log = (message, fields) => {
+    ctx.logger?.info?.(`[boss-panel] ${message}`, fields ?? '')
+  }
+
+  const jsonResponse = (payload, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    })
+
+  const handleRpcRequest = async (request) => {
+    let payload
+    try {
+      payload = await request.json()
+    } catch {
+      return jsonResponse(
+        { ok: false, error: { code: 'invalid_body', message: '请求体必须是 JSON' } },
+        400,
+      )
+    }
+    if (!payload || typeof payload !== 'object') {
+      return jsonResponse(
+        { ok: false, error: { code: 'invalid_body', message: '请求体必须是 JSON 对象' } },
+        400,
+      )
+    }
+    try {
+      const op = payload.op ?? 'status'
+      if (op === 'status') {
+        const snapshot = await buildSnapshot({ dataDir })
+        // 版本没变就不重发几 MB 的列表；客户端沿用上一份数据。
+        if (payload.since && payload.since === snapshot.version) {
+          return jsonResponse({ ok: true, value: { unchanged: true, version: snapshot.version } })
+        }
+        return jsonResponse({ ok: true, value: snapshot })
+      }
+      if (op === 'detail') {
+        return jsonResponse({ ok: true, value: await buildDetail(payload.company, { dataDir }) })
+      }
+      if (op === 'pending_mark') {
+        const status = String(payload.status ?? '')
+        if (!['pending', 'sent', 'dismissed'].includes(status)) {
+          throw operationError('invalid_status', `不支持的队列状态：${status}`)
+        }
+        return jsonResponse({
+          ok: true,
+          value: await markPending(payload.id, status, { dataDir }),
+        })
+      }
+      if (op === 'ping') {
+        return jsonResponse({ ok: true, value: { dataDir } })
+      }
+      throw operationError('unknown_op', `未知操作：${String(op)}`)
+    } catch (error) {
+      log('rpc 失败', { error: messageOf(error) })
+      return jsonResponse(
+        { ok: false, error: { code: error?.code ?? 'internal_error', message: messageOf(error) } },
+        200,
+      )
+    }
+  }
+
+  const installWebRoute = (webCtx) => {
+    const fetchRegistry =
+      (typeof webCtx.get === 'function' ? webCtx.get('connection') : undefined)?.fetch ??
+      webCtx.connection?.fetch
+    if (!fetchRegistry || typeof fetchRegistry.register !== 'function') return
+    webCtx.effect(() => {
+      const dispose = fetchRegistry.register({
+        path: RPC_PATH,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: handleRpcRequest,
+      })
+      return () => {
+        try {
+          void Promise.resolve(dispose()).catch(() => {})
+        } catch {
+          /* 已经释放 */
+        }
+      }
+    }, 'boss-panel: /api/boss-panel.rpc')
+  }
+
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['connection'], installWebRoute)
+  }
+
+  log('已就绪', { dataDir })
+}
