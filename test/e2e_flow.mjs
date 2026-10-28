@@ -4,13 +4,13 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtemp, rm, readFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import os, { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const PY = process.env.BOSS_PY || 'python3'
 const SCRIPT =
   process.env.BOSS_APPROVALS ||
-  '/Users/runking/.local/share/dsh-runtime/scripts/boss_approvals.py'
+  path.join(os.homedir(), '.local/share/dsh-runtime/scripts/boss_approvals.py')
 const { buildSnapshot } = await import('../index.js')
 
 const dir = await mkdtemp(path.join(tmpdir(), 'boss-e2e-'))
