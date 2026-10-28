@@ -1158,10 +1158,28 @@ export async function buildSnapshot(options = {}) {
     if (error?.code !== 'ENOENT') approvalsCorrupt = true
   }
 
+  // 发送链跑没跑，是面板看不到的一面：runner 每小时至少写一行审计，
+  // 长时间没动静而又有条目在等发，就说明后台停了（2026-10-29 SRE 审计）。
+  // runner 每轮都 touch heartbeat（含 IDLE），审计文件只在有动作时写 —— 先看心跳。
+  const stateDir = path.join(os.homedir(), '.hermes/state')
+  let lastRunnerAt = null
+  for (const name of ['boss_approval_heartbeat', 'boss_approval_audit.jsonl']) {
+    try {
+      const stat = await fs.stat(path.join(stateDir, name))
+      lastRunnerAt = new Date(stat.mtimeMs).toISOString()
+      break
+    } catch {
+      lastRunnerAt = null
+    }
+  }
+  const runnerStaleMin = lastRunnerAt
+    ? Math.round((Date.now() - Date.parse(lastRunnerAt)) / 60000)
+    : null
+
   return {
     version,
     updatedAt: toIso(merged.ts),
-    dataQuality: { approvalsCorrupt },
+    dataQuality: { approvalsCorrupt, lastRunnerAt, runnerStaleMin },
     dataDir,
     today: todayKey,
     counts,
@@ -1334,7 +1352,7 @@ export async function markPending(id, status, options = {}) {
     hit = item
   }
   if (!hit) throw operationError('not_found', `队列里没有这一条：${String(id)}`)
-  await fs.writeFile(file, JSON.stringify({ ...doc, items, ts: new Date().toISOString() }, null, 1))
+  await writeJsonAtomic(file, { ...doc, items, ts: new Date().toISOString() })
   return { ok: true, id: String(id), status }
 }
 

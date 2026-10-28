@@ -506,6 +506,7 @@ function createUiKit(React) {
       approvalPeekFirst: '先打开这一条看一眼 JD 和草稿，再点发送',
       approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
       approvalsCorrupt: '待发清单暂时读不出来（可能正在写入）—— 下面的列表不是最新状态，稍等会自动恢复',
+      runnerStale: '后台发送器已经 {n} 分钟没动静了 —— 面板上点「发出」不会真的发出去，检查 dsh 的 boss-approval-send 任务',
       hardGateChip: 'JD 硬门槛',
       approvalStuck: '有 {n} 条已排上、超过 20 分钟没发出 —— 后台发送任务可能停了（boss-approval-send）',
       chatOlder: '上面还有 {n} 条更早的聊天，这里只显示最近 30 条',
@@ -673,6 +674,7 @@ function createUiKit(React) {
       approvalPeekFirst: 'Open this item first, then hit send',
       approvalGone: 'This item is no longer in the queue — refreshed',
       approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
+      runnerStale: 'The background sender has been idle for {n} min — approving here will not send; check the boss-approval-send task',
       hardGateChip: 'JD hard gate',
       approvalStuck: '{n} approved over 20 minutes ago but not sent — the background sender may be down',
       chatOlder: '{n} earlier messages are hidden — showing the latest 30',
@@ -2180,6 +2182,23 @@ function createUiKit(React) {
           loading ? h(UI.EmptyState, null, t('loading')) : null,
           !loading && !data ? h(UI.EmptyState, null, t('empty')) : null,
 
+          !loading && data
+            ? (() => {
+                const dq = data.dataQuality ?? {}
+                const openN = (data.approvals?.items ?? []).filter(
+                  (it) => it.status === 'pending' || it.status === 'approved',
+                ).length
+                const stale = dq.runnerStaleMin != null && dq.runnerStaleMin > 90 && openN > 0
+                if (!dq.approvalsCorrupt && !stale) return null
+                return h(
+                  'div',
+                  { className: 'boss-degraded', role: 'status' },
+                  dq.approvalsCorrupt ? h('div', null, t('approvalsCorrupt')) : null,
+                  stale ? h('div', null, t('runnerStale', { n: dq.runnerStaleMin })) : null,
+                )
+              })()
+            : null,
+
           !loading && data ? h(TabBar, { tab, setTab, t }) : null,
 
           // —— 今天：只放需要动手的事，0 条的区块整块消失 ——
@@ -2187,13 +2206,6 @@ function createUiKit(React) {
             ? h(
                 'div',
                 { className: 'boss-today', role: 'tabpanel', 'aria-label': t('tabToday') },
-                data?.dataQuality?.approvalsCorrupt
-                  ? h(
-                      'div',
-                      { className: 'boss-degraded', role: 'status' },
-                      t('approvalsCorrupt'),
-                    )
-                  : null,
                 h(
                   'div',
                   { className: 'boss-kpi' },

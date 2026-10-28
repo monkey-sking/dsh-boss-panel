@@ -219,6 +219,21 @@ node test/e2e_flow.mjs        # 端到端：JS 宿主 + Python 发送侧的契�
 `FIT_WARN`（记进结果 `tail` 与审计），不再拦发。事实闸门没有这个例外 —— 文案里
 碰到年限/上线状态等硬事实仍然直接 `fact_blocked`，只能改文案后让用户重新点。
 
+### 失败会不会告诉你（2026-10-29 SRE 审计后补）
+
+改造前这条链「正常」和「整段坏掉」是同一种表现：静默。73 次调度里 71 次零输出，
+唯一沾边的巡检规则（R5 空转）被判成优化建议且在显示前被过滤。现在分三层：
+
+| 层 | 触发 | 用户看到 |
+| --- | --- | --- |
+| 即时 | runner 的 `notify()`：队列生成失败、发件箱启动非 0、超时无结果、空结果（登录过期）、被闸门挡住、审批文件读坏 | IM 一条，写明哪几条没发；同类签名 6 小时内只推一次，防刷屏 |
+| 面板 | `dataQuality.runnerStaleMin`（读 `~/.hermes/state/boss_approval_heartbeat`）> 90 分钟且有待发条目 | 任意 Tab 顶部横幅「后台发送器已经 N 分钟没动静」 |
+| 日报 | `ops_health.py` R7：审批链一天没动作、或近 24 小时出现 skip/no_result/blocked/notify_failed | 21:10 的定时任务日报，1 级 |
+
+配套修了两处「有日志没人看」：`notify.sh` 不再把飞书报错丢进 `/dev/null`（落 `notify-YYYYMMDD.log` 并带 ERR 行），
+`ops_health.py` 的 R4 现在同时扫 `*.txt` 与 `notify-*.log`。runner 每轮 touch 心跳文件，
+所以「没活干」不会被误判成「停摆」；`--quiet` 只影响 stdout，不影响心跳与告警。
+
 ### 发送链的坑（2026-10-28 实测，改之前先看）
 
 `ego-browser` 是**常驻 daemon**，`ego_run.sh nodejs` 的脚本跑在 daemon 进程里，因此：
