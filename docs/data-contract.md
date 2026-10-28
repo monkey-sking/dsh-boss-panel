@@ -142,3 +142,17 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py lint
 
 起因：2026-10-28 用户看到「今天发出 0 / 全部 810 条会话」，实际是没重启的旧宿主 + 旧数据。
 面板可以旧，但不能假装新。
+
+## 10. 草稿怎么进面板（2026-10-29）
+
+定时任务写的是 `DRAFT_<YYYYMMDD>_<HHMM>.md`（给人看），面板读的是 `boss_approvals.json`。
+桥是 `~/.local/share/dsh-runtime/scripts/boss_drafts_import.py`，每 20 分钟跑一次（noagent 任务
+`boss-drafts-import`，`--apply --quiet`）。
+
+解析契约（写草稿时遵守，否则该条不会出现在面板）：
+- 二级标题 `## N. 公司（城市）· 岗位 薪资 · X 档`；
+- 紧跟的列表里要有 `` - encryptJobId: `...` ``；
+- 草稿用引用块：`草稿（过闸）：` 下一行以 `>` 开头，可多行。
+
+行为：只**新增**不存在的 id，绝不覆盖已有条目的事实字段；jdText 从同轮 `r<日期>_<时段>_jd.json`
+按 jobId 取；解析不到公司/岗位/草稿/jobId 的整条跳过并打印原因。
