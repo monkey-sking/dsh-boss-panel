@@ -445,6 +445,9 @@ function normalizeThread(row) {
     preview: String(row.preview ?? '').trim(),
     fresh: row.__fresh === true,
     unverified: row.__unverified === true,
+    // BOSS 的系统卡（「我想要一份您的附件简历，是否同意」）不是普通消息：
+    // 末条是它时，「等对方」其实是「等你点同意」，行内不提示就会以为已经处理完。
+    consent: /是否同意|想要一份您的附件简历|发送简历/.test(String(row.last ?? '')),
   }
 }
 

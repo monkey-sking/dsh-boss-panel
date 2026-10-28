@@ -441,6 +441,7 @@ function createUiKit(React) {
       waitSub: '对方最后一句在等你，回完这条就翻篇',
       waitEmpty: '现在没有等你回的消息',
       goReply: '去回',
+      consentNeeded: '待同意发简历',
       goReplyHint: '新标签打开 BOSS 聊天，公司名已复制到剪贴板',
       openInBoss: '在 BOSS 打开聊天',
       sentNone: '暂无回复',
@@ -473,7 +474,7 @@ function createUiKit(React) {
       tabApproval: '审批',
       statApproval: '待审批',
       approvalTitle: '待发首触',
-      approvalSub: '点「发送」= 把下面的草稿发给对方；点「不发」= 这条不再出现',
+      approvalSub: '点「发送」= 把这条草稿发给对方（10 分钟内后台发出，发出后不可撤回）；点「不发」= 永久不再出现，可随时点「撤回」找回',
       approvalEmpty: '没有待审批的候选人 —— 今日候选都处理完了',
       approvalStale: '宿主还没加载审批数据 —— index.js 没重载，重启一次 DSH 后这里就会出现候选',
       approvalSendLog: '最近发送',
@@ -605,6 +606,7 @@ function createUiKit(React) {
       waitSub: 'Their last message is waiting; reply and it clears',
       waitEmpty: 'Nothing waiting on you right now',
       goReply: 'Reply',
+      consentNeeded: 'Resume consent pending',
       goReplyHint: 'Opens BOSS chat in a new tab, company name copied',
       openInBoss: 'Open chat in BOSS',
       sentNone: 'No replies yet',
@@ -631,7 +633,7 @@ function createUiKit(React) {
       tabApproval: 'Approval',
       statApproval: 'To approve',
       approvalTitle: 'First touches to send',
-      approvalSub: 'Send = deliver the draft below; Skip = this lead disappears',
+      approvalSub: 'Send = deliver this draft (within 10 min, cannot be undone); Skip = gone for good, revocable',
       approvalEmpty: 'Nothing to approve — every candidate is handled',
       approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
       approvalSendLog: 'Recently sent',
@@ -951,6 +953,7 @@ function createUiKit(React) {
       .boss-fail-row { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 0; }
       .boss-fail-why { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-aq-more { padding: 6px 2px 0; }
+      .boss-wait-consent { display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--dsw-alias-label-warning); color: var(--dsw-alias-label-warning); font-size: 11.5px; }
       .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; }
       .boss-kpi-item b { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
       .boss-kpi-sep { color: var(--dsw-alias-border-l2); }
@@ -1536,6 +1539,9 @@ function createUiKit(React) {
                 item.salary ? h('span', { className: 'boss-sal' }, item.salary) : null,
               ),
               h('div', { className: 'boss-wait-msg' }, item.last || '—'),
+              item.consent
+                ? h('span', { className: 'boss-wait-consent' }, t('consentNeeded'))
+                : null,
               h(
                 'div',
                 { className: 'boss-aq-meta' },
