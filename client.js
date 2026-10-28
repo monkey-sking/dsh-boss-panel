@@ -511,6 +511,7 @@ function createUiKit(React) {
       approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
       approvalsCorrupt: '审批文件一时读不出来（可能后台正在写），下面的待发列表不是真实状态 —— 稍等会自动恢复',
       hardGateChip: 'JD 硬门槛',
+      approvalStuck: '有 {n} 条已通过但超过 20 分钟没发出去 —— 后台发送器可能没在跑（dsh 的 boss-approval-send 任务）',
       hardGateWarn: 'JD 写明了硬性条件，先确认你够得上再发',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
@@ -680,6 +681,7 @@ function createUiKit(React) {
       approvalGone: 'This item is no longer in the queue — refreshed',
       approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
       hardGateChip: 'JD hard gate',
+      approvalStuck: '{n} approved over 20 minutes ago but not sent — the background sender may be down',
       hardGateWarn: 'The JD states a hard requirement — confirm you qualify before sending',
       approvalStatusPending: 'Waiting',
       approvalStatusApproved: 'Approved · queued',
@@ -2032,6 +2034,14 @@ function createUiKit(React) {
         (item) => item.status === 'pending' || item.status === 'approved',
       )
 
+      // 已通过但后台还没发：超过 20 分钟基本是发送器没在跑，得让人看见，别一条卡一天。
+      const stuckApproved = approvalActionable.filter(
+        (item) =>
+          item.status === 'approved' &&
+          item.approvedAt &&
+          Date.now() - Date.parse(item.approvedAt) > 20 * 60 * 1000,
+      )
+
       // 「今天」只算真正会出现在首屏的三件事：今天发出、等我回、面试。
       // 口径与宿主对齐：本地日 + approvals ∪ contacted 去重，别在前端再自算一个「今天」。
       const sentToday = data?.daily?.todayOutreach ?? 0
@@ -2338,6 +2348,13 @@ function createUiKit(React) {
                       approvalActionable.length
                         ? h('span', { className: 'boss-section-hint' }, t('approvalSub'))
                         : h('span', { className: 'boss-section-hint' }, t('approvalAllDone')),
+                      stuckApproved.length
+                        ? h(
+                            'div',
+                            { className: 'boss-aq-notice' },
+                            t('approvalStuck', { n: stuckApproved.length }),
+                          )
+                        : null,
                       approvalNotice ? h('div', { className: 'boss-aq-notice' }, approvalNotice) : null,
                       approvalActionable.length
                         ? h(ApprovalQueue, {
