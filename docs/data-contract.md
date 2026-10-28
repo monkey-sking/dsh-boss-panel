@@ -1,0 +1,53 @@
+# 面板数据契约（2026-10-28）
+
+先回答三个问题：**界面有人看吗、有设计吗、数据格式有人定吗。**
+
+- 有人看：a11y、数据口径、求职者 UX、安全、前端工程质量五轮只读评审都出过问题清单，改完有测试。
+- 有设计：交互按「今天要办什么」组织（等我回 → 待发 → 已发 → 面试），不是按数据表组织。
+- 有契约：就是这份文件。**字段只有三种状态：采集到了 / 明确标记「未采集」/ 不允许为空。**
+
+## 1. 一张审批条目长什么样
+
+`boss_approvals.json` → `items[]`，一条候选一个对象。
+
+| 字段 | 来源 | 写入时机 | 发送前必须 | 空值语义 |
+|---|---|---|---|---|
+| `id` | `日期-公司-encryptJobId` | add | 是 | 不允许为空（坏了整条丢弃） |
+| `company` | BOSS 列表接口 | add | 是 | 同上 |
+| `jobTitle` / `salary` / `city` | 列表接口 `jobName/salaryDesc/cityName` | add | 是 | 未采集 |
+| `jobId` | 列表接口 `encryptJobId` | add | **是**（首触要打开 JD 页点「立即沟通」） | 未采集 |
+| `jdText` | JD 详情页 `.job-detail-section` 的 innerText | 读 JD 时 | **是** | 未采集 |
+| `recruiter` / `recruiterTitle` | 列表 `bossName`；首触后从会话表 join | add / 展示时 | 否 | 未采集（首触前正常） |
+| `tier` | 人工/启发式分档 A/B+ | add | 否 | 未采集（≠B 档，UI 显示「未评级」） |
+| `evidence` / `gap` | 筛选时的 JD 证据与缺口 | add | 否 | 未采集 |
+| `draft` / `draftHash` | 首触文案 + sha1 前 16 位 | add（自动算 hash） | **是** | 缺 hash 一律不发 |
+| `status` | pending/approved/sent/skipped/failed | 面板 / runner | — | 缺省 pending |
+| `approvedAt` / `approvedDraftHash` | 面板点「发送」时写 | 决策 | **是**（30 分钟 TTL + 文案绑定） | — |
+| `sendResult` / `sentAt` | runner 回写 | 发送后 | — | — |
+
+### 公司详情为什么只有三行
+
+`company_meta.json` 的字段就是 `industry / stage / city` 三个，来自早前抓取；**没有规模、简介、融资额**。
+所以弹窗里「规模/简介」显示「未采集」是事实，不是渲染 bug。要补得回到公司页抓，属于采集侧新增，不在面板里编。
+
+### 聊天记录为什么有的空
+
+`boss_thread_history.json` 只覆盖**抓过的线程**（当前 35 条）。首触刚发出、对方还没回、
+或 watcher 还没轮到的公司，弹窗里就是空态「首次沟通，还没有往来消息」——
+这是「没有消息」，不是「加载失败」。
+
+## 2. UI 的硬规则
+
+1. **固定字段、固定行数**：弹窗里 11 行 kv 永远在，空值写「未采集」。不允许这家少一行、那家多一行。
+2. **齐全度可读**：弹窗顶部「资料 5/6 · 缺：对接人」；队列行只在缺 JD（会阻塞发送）时提示。
+3. **没有 0 条空区块**：等我回、待发、面试、近期首触，没数据就整块不渲染（或显示一句空态）。
+4. **状态色只有一种含义**：绿=已发/已通过，红=失败，灰=不发/已结束；同一状态不在两处用两种颜色。
+
+## 3. 体检命令
+
+```bash
+python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py audit
+```
+
+- `WARN`：非阻塞字段缺失（如首触前的对接人、未评级）。
+- `BLOCK`：pending/approved 缺 `jdText` / `jobId` / `draft` —— 这种条目**发不出去**，带 `exit 1`。

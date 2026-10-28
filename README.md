@@ -190,6 +190,11 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
 - **单向状态机**：`approved` 只能从 `pending`/`failed` 进，`sent` 不回退；面板侧写审计
   `~/.hermes/state/boss_approval_panel_audit.jsonl`（谁、何时、从什么状态改成什么、hash）。
 
+## 数据契约
+
+字段来源、必填时机、空值语义（「未采集」而不是空白）见 [docs/data-contract.md](docs/data-contract.md)。
+体检：`python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py audit`（待发缺 JD/职位号 → `BLOCK` + exit 1）。
+
 ## 安全边界（2026-10-28 只读安全评审的实测结论）
 
 - **RPC 不是裸路由**：`/api/boss-panel.rpc` 由宿主 `ctx.connection.fetch` 承载，无凭据 `401`、

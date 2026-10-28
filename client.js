@@ -474,6 +474,15 @@ function createUiKit(React) {
       tabApproval: '审批',
       statApproval: '待审批',
       approvalTitle: '待发首触',
+      notCollected: '未采集',
+      coverageLine: '资料 {filled}/{total} · 缺：{missing}',
+      coverageComplete: '（齐全）',
+      field_jd: 'JD 正文',
+      field_salary: '薪资',
+      field_city: '城市',
+      field_jobId: '职位链接',
+      field_recruiter: '对接人',
+      field_tier: '匹配档位',
       approvalSub: '点「发送」= 把这条草稿发给对方（10 分钟内后台发出，发出后不可撤回）；点「不发」= 永久不再出现，可随时点「撤回」找回',
       approvalEmpty: '没有待审批的候选人 —— 今日候选都处理完了',
       approvalStale: '宿主还没加载审批数据 —— index.js 没重载，重启一次 DSH 后这里就会出现候选',
@@ -499,6 +508,7 @@ function createUiKit(React) {
       approvalFailed: '操作失败：{message}',
       approvalStaleDraft: '这条草稿在你查看后改过 —— 重新打开看一眼再发',
       approvalPeekFirst: '先打开这一条看一眼 JD 和草稿，再点发送',
+      approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
       approvalStatusSent: '已发送',
@@ -633,6 +643,15 @@ function createUiKit(React) {
       tabApproval: 'Approval',
       statApproval: 'To approve',
       approvalTitle: 'First touches to send',
+      notCollected: 'not collected',
+      coverageLine: 'Data {filled}/{total} · missing: {missing}',
+      coverageComplete: '(complete)',
+      field_jd: 'JD text',
+      field_salary: 'Salary',
+      field_city: 'City',
+      field_jobId: 'Job link',
+      field_recruiter: 'Recruiter',
+      field_tier: 'Match tier',
       approvalSub: 'Send = deliver this draft (within 10 min, cannot be undone); Skip = gone for good, revocable',
       approvalEmpty: 'Nothing to approve — every candidate is handled',
       approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
@@ -655,6 +674,7 @@ function createUiKit(React) {
       approvalFailed: 'Action failed: {message}',
       approvalStaleDraft: 'This draft changed after you opened it — reopen and confirm',
       approvalPeekFirst: 'Open this item first, then hit send',
+      approvalGone: 'This item is no longer in the queue — refreshed',
       approvalStatusPending: 'Waiting',
       approvalStatusApproved: 'Approved · queued',
       approvalStatusSent: 'Sent',
@@ -743,7 +763,12 @@ function createUiKit(React) {
             const value = await callHost(
               previous?.version ? { op: 'status', since: previous.version } : { op: 'status' },
             )
-            if (value && value.unchanged) {
+            if (value && value.unchanged && !state.error) {
+              // 引用不变：订阅者拿到同一个 state，React 可以直接跳过重渲染（工程评审 #9）。
+              // 之前每 15 秒都换一个新对象，等于白白重建 800 行。
+              inflight = null
+              return
+            } else if (value && value.unchanged) {
               state = { loading: false, data: previous, error: null }
             } else {
               state = { loading: false, data: value, error: null }
@@ -953,6 +978,7 @@ function createUiKit(React) {
       .boss-fail-row { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 0; }
       .boss-fail-why { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-aq-more { padding: 6px 2px 0; }
+      .boss-ap-coverage { margin: 6px 0 8px; padding: 5px 9px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; }
       .boss-wait-consent { display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--dsw-alias-label-warning); color: var(--dsw-alias-label-warning); font-size: 11.5px; }
       .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; }
       .boss-kpi-item b { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
@@ -1018,6 +1044,9 @@ function createUiKit(React) {
       'aria-label': label,
       onClick: onActivate,
       onKeyDown: (event) => {
+        // 行里有真按钮（「去回」「发送」「重发」）：焦点在它们身上时把 Enter 让给原生激活，
+        // 否则行 handler 会 preventDefault 吞掉点击并弹出详情（工程评审 #10）。
+        if (event && event.target && event.target !== event.currentTarget) return
         if (event && (event.key === 'Enter' || event.key === ' ')) {
           event.preventDefault?.()
           onActivate?.()
@@ -1687,6 +1716,10 @@ function createUiKit(React) {
         void callHost({ op: 'approval_detail', id })
           .then((value) => {
             APPROVAL_DETAIL_CACHE.set(cacheKey, value)
+            if (APPROVAL_DETAIL_CACHE.size > 8) {
+              const oldest = APPROVAL_DETAIL_CACHE.keys().next().value
+              if (oldest !== cacheKey) APPROVAL_DETAIL_CACHE.delete(oldest)
+            }
             if (alive) setState({ loading: false, data: value, error: null })
           })
           .catch((error) => {
@@ -1695,31 +1728,41 @@ function createUiKit(React) {
         return () => {
           alive = false
         }
-      }, [id])
+      }, [id, cacheKey])
 
       const data = state.data ?? item ?? {}
       const status = item?.status ?? data.status ?? 'pending'
+      // 字段固定、空值写「未采集」：不允许有的条目少一行、有的条目多一行，
+      // 用户看到的每个空格都应该是一个明确的「没采到」，而不是让人猜。
+      const MISSING = t('notCollected')
+      const orMissing = (value) => (value ? String(value) : MISSING)
       const kv = [
-        ['job', data.jobTitle],
-        ['salary', data.salary],
-        ['city', data.city],
-        ['recruiter', [data.recruiter, data.recruiterTitle].filter(Boolean).join(' / ')],
-        ['ab', data.tier],
-        ['industry', data.companyDetail?.industry],
-        ['stage', data.companyDetail?.stage],
-        ['scale', data.companyDetail?.scale],
-        ['first', data.companyDetail?.contactedBefore],
-        ['channel', data.companyDetail?.channel],
-        ['note', data.companyDetail?.note],
-      ].filter(([, value]) => value)
+        ['job', orMissing(data.jobTitle)],
+        ['salary', orMissing(data.salary)],
+        ['city', orMissing(data.city)],
+        ['recruiter', orMissing([data.recruiter, data.recruiterTitle].filter(Boolean).join(' / '))],
+        ['ab', orMissing(data.tier)],
+        ['industry', orMissing(data.companyDetail?.industry)],
+        ['stage', orMissing(data.companyDetail?.stage)],
+        ['scale', orMissing(data.companyDetail?.scale)],
+        ['first', orMissing(data.companyDetail?.contactedBefore)],
+        ['channel', orMissing(data.companyDetail?.channel)],
+        ['note', orMissing(data.companyDetail?.note)],
+      ]
+      const filled = (data.coverage ? Object.values(data.coverage).filter(Boolean).length : 0)
+      const total = data.coverage ? Object.keys(data.coverage).length : 0
+      const missingLabels = (data.missing ?? []).map((key) => t(`field_${key}`)).join('、')
       const msgs = data.msgs ?? []
+      const coverageLine = data.coverage
+        ? t('coverageLine', { filled, total, missing: missingLabels || t('coverageComplete') })
+        : null
 
       const acts = []
       if (status === 'pending') {
         acts.push(
           h(
             UI.Button,
-            { variant: 'primary', disabled: busy, onClick: () => onDecide(item, 'approved') },
+            { variant: 'primary', disabled: busy, onClick: () => onDecide(item, 'approved', data.draftHash) },
             t('approvalApprove'),
           ),
         )
@@ -1768,6 +1811,9 @@ function createUiKit(React) {
                     )
                   : null,
               ),
+              coverageLine
+                ? h('div', { className: 'boss-ap-coverage' }, coverageLine)
+                : null,
               kv.length
                 ? h(
                     'div',
@@ -2412,7 +2458,8 @@ function createUiKit(React) {
                   threads.length
                     ? threads.map((item, index) =>
                         h(ThreadRow, {
-                          key: `${item.company}|${item.who}|${index}`,
+                          // index 不进 key：筛选/排序变化时它会让行按位置复用，内容被就地改写（工程评审 #10）。
+                          key: `${item.company}|${item.who}|${item.time || ''}|${item.jobId || ''}`,
                           item,
                           t,
                           onOpen: open,

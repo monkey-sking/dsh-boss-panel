@@ -593,7 +593,7 @@ function mergeFresh(allDoc, freshDoc) {
     }
   }
   for (const [company, fresh] of byCompany) {
-    if (!known.has(company)) rows.unshift({ ...fresh })
+    if (!known.has(company)) rows.unshift({ ...fresh, __fresh: true })
   }
 
   return { rows, ts: freshDoc?.ts ?? allDoc?.ts ?? null }
@@ -695,6 +695,8 @@ export async function buildSnapshot(options = {}) {
     apptDoc.mtime,
     handledDoc.mtime,
     resumeVersionsDoc.mtime,
+    // 「今天」是构建时算的：跨零点后文件都没写，客户端拿着 since 就会一整天显示昨天的天数（工程评审 #3）。
+    localDateKey(new Date()),
   ].join('-')
 
   const merged = mergeFresh(allDoc.value, freshDoc.value)
@@ -775,12 +777,19 @@ export async function buildSnapshot(options = {}) {
   const sigOfRow = (row) =>
     `${row.time || ''}|${String(row.full || row.last || row.preview || '').slice(0, 60)}`
 
+  // 外部 JSON 里手写的状态字串不能直接进桶：一个错字会造出 filters 选不到的幽灵状态（工程评审 #7）。
+  const STATE_SAFE = new Set(ORDER)
+  const safeState = (value, fallback = '等对方') => {
+    const text = String(value ?? '').trim()
+    return STATE_SAFE.has(text) ? text : fallback
+  }
+
   const classify = (row) => {
     const company = row.company
     // HANDLED：人工复核过的结论优先（比 AUDIT 更细，AUDIT 是公司级、这是「这一次对话」级）。
     //   会话一变签名就失效，所以不会把新消息压掉。
     const hrec = handledMap.get(company)
-    if (hrec && hrec.sig && hrec.sig === sigOfRow(row)) return hrec.state || '等对方'
+    if (hrec && hrec.sig && hrec.sig === sigOfRow(row)) return safeState(hrec.state)
     // SELFTAIL 2026-10-25：人工覆盖写的是「待你决定」但末条其实是我方且已送达/已读时，
     // 球在对方，必须降级成「等对方」——否则面板长期挂着假待办（用户会以为有活没干）。
     // AUDIT（人工复核）优先级高于 OVR：2026-10-27 全量审计的 15 条结论。
@@ -788,13 +797,13 @@ export async function buildSnapshot(options = {}) {
       const audited = AUDIT[company][0]
       const selfTailAudit = row.lastFrom === '我' && String(row.delivery ?? '').trim() !== ''
       if (audited === '待你决定' && selfTailAudit) return '等对方'
-      return audited
+      return safeState(audited)
     }
     if (Object.prototype.hasOwnProperty.call(OVR, company)) {
       const override = OVR[company][0]
       const selfTail = row.lastFrom === '我' && String(row.delivery ?? '').trim() !== ''
       if (override === '待你决定' && selfTail) return '等对方'
-      return override
+      return safeState(override)
     }
     if (isBlacklisted(company)) return '已结束'
 
@@ -884,7 +893,7 @@ export async function buildSnapshot(options = {}) {
       ) {
         state = '等对方'
       }
-      return state
+      return safeState(state)
     }
     if (jevState && !row.fresh && jevState === '已结束') return '已结束'
 
@@ -990,7 +999,11 @@ export async function buildSnapshot(options = {}) {
       lastFrom: row.lastFrom,
       job,
       salary,
-      track: roleTrack(job),
+      // 只留 120 字：客户端只当 title/aria-label 用，全文留在原文件（工程评审 #4）。
+      track: (() => {
+        const role = roleTrack(job)
+        return role && role.evidence ? { ...role, evidence: String(role.evidence).slice(0, 120) } : role
+      })(),
       fresh: row.fresh,
     })
   }
@@ -1065,6 +1078,8 @@ export async function buildSnapshot(options = {}) {
     addTouch(String(item.date ?? '').slice(0, 10), item.company)
   }
   for (const item of approvalsDoc.value?.items ?? []) {
+    // 这条循环读的是原始文件，绕过了 normalizeApproval —— 一条 null 就能让整页白屏（工程评审 #1）。
+    if (!item || typeof item !== 'object') continue
     if (item.status !== 'sent' || !item.sentAt) continue
     const when = new Date(item.sentAt)
     if (Number.isNaN(when.getTime())) continue
@@ -1117,9 +1132,11 @@ export async function buildSnapshot(options = {}) {
   })
 
   const counts = {
-    // 行数 ≠ 公司数：810 行里有同公司多行（海马云 3 行），面板别把行数当沟通对象数（审计 #7）。
-    threads: rows.length,
-    threadRows: rows.length,
+    // 行数 ≠ 公司数：同一家可能多行（海马云 3 行）；也不能算上被跳过的空公司行，
+    // 否则表头写 810、列表只有 807（工程评审「其他」）。
+    threads: threads.length,
+    threadRows: threads.length,
+    skippedRows,
     companies: new Set(threads.map((item) => item.company)).size,
     pending: pending.length,
     byState,
@@ -1195,6 +1212,7 @@ function normalizeApproval(item) {
     evidence: String(item.evidence ?? '').trim(),
     gap: String(item.gap ?? '').trim(),
     draft: String(item.draft ?? '').trim(),
+    jdText: String(item.jdText ?? '').trim(),
     draftHash: String(item.draftHash ?? '').trim(),
     status: APPROVAL_STATUSES.includes(status) ? status : 'pending',
     addedAt: toIso(item.addedAt),
@@ -1222,7 +1240,9 @@ function buildApprovals(doc, threadRows = []) {
     if (!item) continue
     const row = byCompany.get(item.company)
     if (row) {
-      if (!item.recruiter && row.name) item.recruiter = row.name
+      // 会话行在这里已经过 normalizeThread（字段叫 who，不是 name）——之前写 row.name 永远拿不到。
+      const who = row.who || row.name || ''
+      if (!item.recruiter && who) item.recruiter = who
       if (!item.threadState && row.state) item.threadState = row.state
       if (!item.threadTime && row.time) item.threadTime = row.time
       if (!item.threadLast && row.last) item.threadLast = row.last
@@ -1230,6 +1250,20 @@ function buildApprovals(doc, threadRows = []) {
       // 面板要能直接回答「我今天发出去的，有人理吗」，不能只靠人工点开看（数据审计 #8）。
       item.threadFrom = row.lastFrom || ''
     }
+    // 资料齐全度：面板不能再出现「有的有公司/JD/聊天，有的缺一块」而看不出为什么。
+    // 每个字段只有两种状态 ——「采集到了」或「标记为未采集」，不留空白让人猜。
+    item.coverage = {
+      jd: Boolean(item.jdText),
+      salary: Boolean(item.salary),
+      city: Boolean(item.city),
+      jobId: Boolean(item.jobId),
+      recruiter: Boolean(item.recruiter),
+      tier: Boolean(item.tier),
+    }
+    item.missing = Object.entries(item.coverage)
+      .filter(([, filled]) => !filled)
+      .map(([key]) => key)
+    item.completeness = `${Object.values(item.coverage).filter(Boolean).length}/${Object.keys(item.coverage).length}`
     out.push(item)
   }
   out.sort((a, b) => {
@@ -1356,7 +1390,26 @@ export async function buildApprovalDetail(id, options = {}) {
  * 面板上切换审批状态。只允许人工三个动作：通过 / 跳过 / 撤回。
  * sent / failed 由 agent 侧 runner 回写，面板不直接写，避免「点一下就算发成功」。
  */
+let approvalWriteChain = Promise.resolve()
+
+/**
+ * 同一个审批文件的读-改-写必须串行：两次并发决策各自读到同一份旧 doc，
+ * 后写的会把前一次抹掉，审计里却留着两条记录（工程评审 #6）。
+ */
+function withApprovalLock(task) {
+  const run = approvalWriteChain.then(task, task)
+  approvalWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
 export async function markApproval(id, status, options = {}) {
+  return withApprovalLock(() => markApprovalUnlocked(id, status, options))
+}
+
+async function markApprovalUnlocked(id, status, options = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR
   const file = fileSet(dataDir).approvals
   const doc = await readJsonStrict(file, { items: [] })
