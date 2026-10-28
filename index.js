@@ -1019,7 +1019,7 @@ export async function buildSnapshot(options = {}) {
   }
 
   const pending = normalizePending(pendingDoc.value)
-  const approvals = buildApprovals(approvalsDoc.value)
+  const approvals = buildApprovals(approvalsDoc.value, threads)
   const agentAudit = buildAgentAudit({
     threads,
     interviews: allInterviews,
@@ -1104,12 +1104,28 @@ function normalizeApproval(item) {
   }
 }
 
-function buildApprovals(doc) {
+function buildApprovals(doc, threadRows = []) {
   const items = Array.isArray(doc?.items) ? doc.items : []
+  // 审批条目常常没记对接人（列表接口只给 bossName，首触时还没建会话）。
+  // 会话表里已经有这条线程时，用它的对接人/最近一句补上，省得弹窗里「对接人 —」。
+  const byCompany = new Map()
+  for (const row of threadRows) {
+    if (!row?.company) continue
+    const prev = byCompany.get(row.company)
+    if (!prev || String(row.time ?? '') > String(prev.time ?? '')) byCompany.set(row.company, row)
+  }
   const out = []
   for (const raw of items) {
     const item = normalizeApproval(raw)
-    if (item) out.push(item)
+    if (!item) continue
+    const row = byCompany.get(item.company)
+    if (row) {
+      if (!item.recruiter && row.name) item.recruiter = row.name
+      if (!item.threadState && row.state) item.threadState = row.state
+      if (!item.threadTime && row.time) item.threadTime = row.time
+      if (!item.threadLast && row.last) item.threadLast = row.last
+    }
+    out.push(item)
   }
   out.sort((a, b) => {
     const rank = (APPROVAL_STATUS_ORDER[a.status] ?? 9) - (APPROVAL_STATUS_ORDER[b.status] ?? 9)

@@ -135,7 +135,8 @@ const textOf = (n) => (typeof n.children?.[0] === 'string' ? n.children[0] : n.c
 const collect = (tree) => { const o = { texts: [], classes: new Set() }; walk(tree, o); return o }
 
 const items = snap.approvals.items
-const live = items.filter((i) => i.status !== 'sent' && i.status !== 'skipped')
+const live = items.filter((i) => i.status === 'pending' || i.status === 'approved' || i.status === 'failed')
+const rowFinder = (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props['data-clickable'] === 'true'
 
 // —— 1) 三个 Tab，审批不再占位 ——
 const tree = renderFresh()
@@ -147,7 +148,7 @@ check('默认落在概览', tabLabels[0] === 'tabOverview')
 // —— 2/3) 概览里有待审批队列 ——
 const out = collect(tree)
 check('概览渲染待审批区块', out.texts.join(' | ').includes('approvalTitle'))
-const rows = findAll(tree, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-row'))
+const rows = findAll(tree, rowFinder)
 check(`队列行数 = ${live.length}`, rows.length === live.length && rows.length > 0)
 const firstCompany = live[0]?.company ?? ''
 const lastCompany = items[Math.min(3, items.length - 1)]?.company ?? ''
@@ -155,6 +156,10 @@ const joined = out.texts.join(' | ')
 check('行里带公司名', !!firstCompany && joined.includes(firstCompany) && joined.includes(lastCompany))
 check('行里带岗位/薪资', joined.includes(live[0]?.jobTitle ?? '@@') && joined.includes(live[0]?.salary ?? '@@'))
 check('概览仍保留「等着回复」区块', out.texts.join(' | ').includes('actionTitle'))
+check('概览有「最近发送」区块', out.texts.join(' | ').includes('approvalSendLog'))
+check('统计卡不再有「待审批」卡', !out.texts.includes('statApproval'))
+const inlineApprove = findAll(tree, (n) => n.props?.onClick && textOf(n) === 'approvalActApprove')
+check('队列行自带「通过」按钮', inlineApprove.length === 2)
 
 // —— 4) 点行开弹窗 ——
 calls.length = 0
@@ -185,12 +190,12 @@ check('带上条目 id', decide?.id === 'demo-001')
   const t2 = renderFresh()
   const o2 = collect(t2)
   check('已通过的行显示状态', o2.texts.join(' | ').includes('approvalStatusApproved'))
-  const rows2 = findAll(t2, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-row'))
+  const rows2 = findAll(t2, rowFinder)
   rows2[0].props.onClick()
   const t3 = rerender()
   const revoke = findAll(t3, (n) => n.props?.onClick && textOf(n) === 'approvalRevoke')
   const approveNow = findAll(t3, (n) => n.props?.onClick && textOf(n) === 'approvalApprove')
-  check('已通过的弹窗只剩「撤回」', revoke.length === 1 && approveNow.length === 0)
+  check('已通过的弹窗只剩「撤回」', revoke.length >= 1 && approveNow.length === 0)
 }
 
 // —— 7) 宿主侧：真实数据也能给 JD / 公司 / 聊天（内容随日期变，只验结构）——

@@ -440,6 +440,13 @@ function createUiKit(React) {
       approvalSub: '你点头，agent 才发',
       approvalEmpty: '没有待审批的候选人 —— 今日候选都处理完了',
       approvalStale: '宿主还没加载审批数据 —— index.js 没重载，重启一次 DSH 后这里就会出现候选',
+      approvalSendLog: '最近发送',
+      approvalSendLogSub: '发出去的首触与失败原因，最近 8 条',
+      approvalSendLogEmpty: '还没有发出记录',
+      approvalActApprove: '通过',
+      approvalActSkip: '跳过',
+      approvalChatNone: '这个岗位还没建会话；点「通过」后由发送端主动开聊',
+      approvalNoJd: 'JD 没有存档，点下面的原链接看岗位页',
       approvalSummary: '待批 {pending} · 已通过待发 {approved} · 已发 {sent} · 跳过 {skipped}',
       approvalApprove: '通过并发送',
       approvalSkip: '跳过',
@@ -562,6 +569,13 @@ function createUiKit(React) {
       approvalSub: 'Nothing is sent until you approve',
       approvalEmpty: 'Nothing to approve — every candidate is handled',
       approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
+      approvalSendLog: 'Recently sent',
+      approvalSendLogSub: 'Latest first-touch results and failures (8)',
+      approvalSendLogEmpty: 'Nothing sent yet',
+      approvalActApprove: 'Approve',
+      approvalActSkip: 'Skip',
+      approvalChatNone: 'No thread yet — sending will open the conversation',
+      approvalNoJd: 'No archived JD — open the original posting below',
       approvalSummary: 'Waiting {pending} · Approved {approved} · Sent {sent} · Skipped {skipped}',
       approvalApprove: 'Approve & send',
       approvalSkip: 'Skip',
@@ -739,6 +753,15 @@ function createUiKit(React) {
       return { text: t('daysAfter', { n: diff }), tone: 'plain' }
     }
 
+    // 审批流的时间戳是 ISO（2026-10-28T11:38:03Z），列表里只留 月-日 时:分（本地时区）。
+    const formatWhen = (iso) => {
+      if (!iso) return ''
+      const d = new Date(iso)
+      if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16)
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+
     const clip = (text, n = 120) => {
       const value = String(text ?? '').trim()
       return value.length <= n ? value : `${value.slice(0, n)}…`
@@ -809,8 +832,24 @@ function createUiKit(React) {
       .boss-aq-head { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); margin: 4px 0 8px; display: flex; gap: 10px; flex-wrap: wrap; }
       .boss-aq-tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
       .boss-aq-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-      .boss-aq-row[data-status="approved"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-success-primary); }
-      .boss-aq-row[data-status="failed"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
+
+      /* 待审批条 + 最近发送：一个容器、每行两栏（依据 / 动作），不用表格以免和「等你回复」看串 */
+      .boss-aq-list { display: flex; flex-direction: column; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+      .boss-aq-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l4); }
+      .boss-aq-item:last-child { border-bottom: 0; }
+      .boss-aq-item[data-clickable="true"] { cursor: pointer; }
+      .boss-aq-item[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
+      .boss-aq-item[data-status="approved"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-success-primary); }
+      .boss-aq-item[data-status="failed"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
+      .boss-aq-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .boss-aq-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+      .boss-aq-co { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+      .boss-aq-job { font-size: 13px; color: var(--dsw-alias-label-secondary); }
+      .boss-aq-meta { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+      .boss-aq-state { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+      .boss-aq-draft { font-size: 12px; color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+      .boss-aq-acts { display: flex; align-items: center; gap: 6px; flex: none; }
+      .boss-aq-log .boss-aq-item { padding: 8px 12px; }
       .boss-ap-notice { color: var(--dsw-alias-brand-primary); }
       .boss-ap-line { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
       .boss-ap-line b { color: var(--dsw-alias-label-primary); font-weight: 500; }
@@ -1261,14 +1300,14 @@ function createUiKit(React) {
       failed: 'approvalStatusFailed',
     }
 
-    function ApprovalQueue({ approvals, t, onOpen, notice }) {
+    function ApprovalQueue({ approvals, t, onOpen, onDecide, busyId, notice }) {
       // 旧宿主（index.js 未重载）的快照里没有 approvals 字段：说清楚，别让人以为是空池。
       if (!approvals) {
         return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalStale')))
       }
       const stats = approvals.stats ?? {}
       const rows = (approvals.items ?? []).filter(
-        (item) => item.status !== 'sent' && item.status !== 'skipped',
+        (item) => item.status === 'pending' || item.status === 'approved' || item.status === 'failed',
       )
       const head = h(
         'div',
@@ -1284,43 +1323,139 @@ function createUiKit(React) {
       if (!rows.length) {
         return h('div', null, head, h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalEmpty'))))
       }
+      // 每条是一张两行的紧凑条：左边判断依据（档位 + 公司·岗位 + 草稿首句），
+      // 右边直接给按钮 —— 不点开弹窗也能通过/跳过；要看 JD/聊天再点整行。
       return h(
         'div',
         null,
         head,
         h(
           'div',
-          { className: 'boss-action boss-aq' },
-          rows.map((item) =>
-            h(
+          { className: 'boss-aq-list' },
+          rows.map((item) => {
+            const acts =
+              item.status === 'pending'
+                ? [
+                    h(
+                      UI.Button,
+                      {
+                        key: 'ok',
+                        variant: 'primary',
+                        size: 'sm',
+                        disabled: busyId === item.id,
+                        onClick: (event) => {
+                          event?.stopPropagation?.()
+                          onDecide(item, 'approved')
+                        },
+                      },
+                      t('approvalActApprove'),
+                    ),
+                    h(
+                      UI.Button,
+                      {
+                        key: 'skip',
+                        variant: 'ghost',
+                        size: 'sm',
+                        disabled: busyId === item.id,
+                        onClick: (event) => {
+                          event?.stopPropagation?.()
+                          onDecide(item, 'skipped')
+                        },
+                      },
+                      t('approvalActSkip'),
+                    ),
+                  ]
+                : [
+                    h(
+                      UI.Button,
+                      {
+                        key: 'revoke',
+                        variant: 'ghost',
+                        size: 'sm',
+                        disabled: busyId === item.id,
+                        onClick: (event) => {
+                          event?.stopPropagation?.()
+                          onDecide(item, 'pending')
+                        },
+                      },
+                      t('approvalRevoke'),
+                    ),
+                  ]
+            return h(
               'div',
               {
                 key: item.id,
-                className: 'boss-action-row boss-aq-row',
+                className: 'boss-aq-item',
                 'data-clickable': 'true',
                 'data-status': item.status,
                 onClick: () => onOpen(item.id),
               },
               h(
                 'div',
-                { className: 'boss-aq-tags' },
-                h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier || 'B'),
-                item.status === 'pending'
-                  ? null
-                  : h(
-                      UI.Tag,
-                      { tone: APPROVAL_TONE[item.status] ?? 'outline' },
-                      t(APPROVAL_LABEL[item.status] ?? 'approvalStatusPending'),
-                    ),
+                { className: 'boss-aq-body' },
+                h(
+                  'div',
+                  { className: 'boss-aq-top' },
+                  h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier || 'B'),
+                  item.status === 'pending'
+                    ? null
+                    : h(
+                        UI.Tag,
+                        { tone: APPROVAL_TONE[item.status] ?? 'outline' },
+                        t(APPROVAL_LABEL[item.status] ?? 'approvalStatusPending'),
+                      ),
+                  h('span', { className: 'boss-aq-co', title: item.company }, item.company || '—'),
+                  h('span', { className: 'boss-aq-job' }, item.jobTitle || ''),
+                  h('span', { className: 'boss-aq-meta' }, [item.salary, item.city].filter(Boolean).join(' · ')),
+                  item.threadState
+                    ? h('span', { className: 'boss-aq-state' }, `${item.threadState}${item.threadTime ? ' · ' + item.threadTime : ''}`)
+                    : null,
+                ),
+                h('div', { className: 'boss-aq-draft', title: item.draft || '' }, clip(item.draft || item.gap || '')),
               ),
+              h('div', { className: 'boss-aq-acts' }, acts),
+            )
+          }),
+        ),
+      )
+    }
+
+    /** 最近发送：把已发/失败/跳过摊开，解决「发出去的看不到去向」。 */
+    function SentLog({ approvals, t }) {
+      const items = (approvals?.items ?? [])
+        .filter((item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped')
+        .sort((a, b) =>
+          String(b.sentAt || b.decidedAt || '').localeCompare(String(a.sentAt || a.decidedAt || '')),
+        )
+        .slice(0, 8)
+      if (!items.length) {
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalSendLogEmpty')))
+      }
+      return h(
+        'div',
+        { className: 'boss-aq-list boss-aq-log' },
+        items.map((item) =>
+          h(
+            'div',
+            { key: item.id, className: 'boss-aq-item', 'data-status': item.status },
+            h(
+              'div',
+              { className: 'boss-aq-body' },
               h(
                 'div',
-                { className: 'boss-action-main' },
-                h('div', { className: 'boss-co', title: item.company }, item.company || '—'),
-                h('div', { className: 'boss-sub' }, [item.jobTitle, item.recruiter].filter(Boolean).join(' · ')),
+                { className: 'boss-aq-top' },
+                h(
+                  UI.Tag,
+                  { tone: item.status === 'sent' ? 'success' : item.status === 'failed' ? 'danger' : 'outline' },
+                  t(APPROVAL_LABEL[item.status] ?? 'approvalStatusPending'),
+                ),
+                h('span', { className: 'boss-aq-co' }, item.company || '—'),
+                h('span', { className: 'boss-aq-job' }, item.jobTitle || ''),
+                h('span', { className: 'boss-aq-meta' }, formatWhen(item.sentAt || item.decidedAt)),
               ),
-              h('span', { className: 'boss-sub' }, [item.salary, item.city].filter(Boolean).join(' · ') || '—'),
-              h('span', { className: 'boss-action-msg', title: item.draft || '' }, clip(item.draft || item.gap || '')),
+              item.sendResult
+                ? h('div', { className: 'boss-aq-draft' }, String(item.sendResult).slice(0, 120))
+                : null,
             ),
           ),
         ),
@@ -1332,14 +1467,21 @@ function createUiKit(React) {
      * 底部三个动作：通过并发送（只改状态，agent 侧 runner 轮询到 approved 才真的发）、
      * 跳过、撤回；已发送的不给回退入口。
      */
+    const APPROVAL_DETAIL_CACHE = new Map()
+
     function ApprovalModal({ id, item, t, busy, onClose, onDecide }) {
-      const [state, setState] = React.useState({ loading: true, data: null, error: null })
+      const cacheKey = `${id}|${item?.draftHash ?? ''}`
+      const cached = APPROVAL_DETAIL_CACHE.get(cacheKey)
+      const [state, setState] = React.useState(
+        cached ? { loading: false, data: cached, error: null } : { loading: true, data: null, error: null },
+      )
 
       React.useEffect(() => {
         let alive = true
-        setState({ loading: true, data: null, error: null })
+        if (!cached) setState({ loading: true, data: null, error: null })
         void callHost({ op: 'approval_detail', id })
           .then((value) => {
+            APPROVAL_DETAIL_CACHE.set(cacheKey, value)
             if (alive) setState({ loading: false, data: value, error: null })
           })
           .catch((error) => {
@@ -1453,9 +1595,15 @@ function createUiKit(React) {
                       ),
                     ),
                   )
-                : h('div', { className: 'boss-cm', 'data-mine': 'false' }, t('approvalChatEmpty')),
+                : h(
+                    'div',
+                    { className: 'boss-cm', 'data-mine': 'false' },
+                    data.threadState ? t('approvalChatEmpty') : t('approvalChatNone'),
+                  ),
               h(UI.SectionTitle, { style: { marginTop: 14 } }, t('approvalJd')),
-              data.jdText ? h('pre', { className: 'boss-ap-jd' }, data.jdText) : h('div', { className: 'boss-sub' }, '—'),
+              data.jdText
+                ? h('pre', { className: 'boss-ap-jd' }, data.jdText)
+                : h('div', { className: 'boss-sub' }, t('approvalNoJd')),
               data.jdUrl
                 ? h(
                     'a',
@@ -1533,6 +1681,7 @@ function createUiKit(React) {
       const [approvalNotice, setApprovalNotice] = React.useState('')
       const [approvalOpen, setApprovalOpen] = React.useState(null)
       const [approvalBusy, setApprovalBusy] = React.useState(false)
+      const [approvalBusyId, setApprovalBusyId] = React.useState(null)
 
       const data = snapshot.data
       const loading = snapshot.loading && !data
@@ -1555,13 +1704,38 @@ function createUiKit(React) {
       }
 
       const pending = data?.pending ?? []
+      // 会话表里已有这条线的，把「对方状态/最近时间」补到审批行上（宿主侧也会补，
+      // 但那份要重启才生效，这里前端先补一次，刷新即可看到）。
+      const threadByCompany = new Map()
+      for (const row of data?.threads ?? []) {
+        if (row?.company) threadByCompany.set(row.company, row)
+      }
+      const approvalsView = data?.approvals
+        ? {
+            ...data.approvals,
+            items: (data.approvals.items ?? []).map((item) => {
+              const row = threadByCompany.get(item.company)
+              if (!row) return item
+              return {
+                ...item,
+                recruiter: item.recruiter || row.who || row.name || '',
+                threadState: item.threadState || row.state || '',
+                threadTime: item.threadTime || row.time || '',
+              }
+            }),
+          }
+        : null
+      // 审批队列里的公司不再在「等你回复」里重复出现（两张表叠着最容易看串）。
+      const approvalCompanies = new Set(
+        (data?.approvals?.items ?? [])
+          .filter((item) => item.status === 'pending' || item.status === 'approved')
+          .map((item) => item.company),
+      )
+      const pendingVisible = pending.filter(
+        (item) => !pendingHidden.has(item.id) && !approvalCompanies.has(item.company),
+      )
 
       const cards = [
-        {
-          label: t('statApproval'),
-          value: String(data?.approvals?.stats?.pending ?? 0),
-          kind: (data?.approvals?.stats?.pending ?? 0) > 0 ? 'warn' : null,
-        },
         { label: t('statThreads'), value: counts.threads ?? 0, kind: null },
         { label: t('statPending'), value: counts.pending ?? 0, kind: null },
         { label: t('statDecide'), value: byState['待你决定'] ?? 0, kind: 'warn' },
@@ -1594,6 +1768,7 @@ function createUiKit(React) {
       // 审批回写：只改本地状态机，不触发发送 —— 发送由 agent 侧 runner 轮询 approved 完成。
       const decideApproval = async (item, status) => {
         setApprovalBusy(true)
+        setApprovalBusyId(item.id)
         try {
           await callHost({ op: 'approval_decide', id: item.id, status })
           setApprovalNotice(
@@ -1609,6 +1784,7 @@ function createUiKit(React) {
           setApprovalNotice(t('approvalFailed', { message: error?.message || String(error) }))
         } finally {
           setApprovalBusy(false)
+          setApprovalBusyId(null)
         }
       }
 
@@ -1757,7 +1933,7 @@ function createUiKit(React) {
                     }),
                   ),
                 ),
-                data.approvals
+                approvalsView
                   ? h(
                       'div',
                       null,
@@ -1768,14 +1944,23 @@ function createUiKit(React) {
                         h('span', { className: 'boss-section-count' }, t('approvalSub')),
                       ),
                       h(ApprovalQueue, {
-                        approvals: data.approvals,
+                        approvals: approvalsView,
                         t,
                         onOpen: setApprovalOpen,
+                        onDecide: decideApproval,
+                        busyId: approvalBusy ? approvalBusyId : null,
                         notice: approvalNotice,
                       }),
+                      h(
+                        'div',
+                        { className: 'boss-section', style: { marginTop: 18 } },
+                        h(UI.SectionTitle, null, t('approvalSendLog')),
+                        h('span', { className: 'boss-section-count' }, t('approvalSendLogSub')),
+                      ),
+                      h(SentLog, { approvals: data.approvals, t }),
                     )
                   : null,
-                pending.filter((item) => !pendingHidden.has(item.id)).length
+                pendingVisible.length
                   ? h(
                       'div',
                       null,
@@ -1786,7 +1971,7 @@ function createUiKit(React) {
                         h('span', { className: 'boss-section-count' }, t('pendingSub')),
                       ),
                       h(PendingRows, {
-                        items: pending.filter((item) => !pendingHidden.has(item.id)),
+                        items: pendingVisible,
                         t,
                         onOpen: open,
                         onMark: markPending,
