@@ -1294,6 +1294,10 @@ function buildApprovals(doc, threadRows = []) {
       // 对方是否已经回了：审批条目的线程末条来自对方，就是「球在对方 → 已经回我了」。
       // 面板要能直接回答「我今天发出去的，有人理吗」，不能只靠人工点开看（数据审计 #8）。
       item.threadFrom = row.lastFrom || ''
+      // 送达 ≠ 已读。运营复盘里「0 已读」和「已读不回」是两个完全不同的结论
+      // （前者是没触达，后者才轮到文案），所以这一位必须显式落进快照。
+      const delivery = String(row.delivery || '')
+      item.readState = delivery.includes('已读') ? 'read' : delivery.includes('送达') ? 'delivered' : ''
     }
     // 资料齐全度：面板不能再出现「有的有公司/JD/聊天，有的缺一块」而看不出为什么。
     // 每个字段只有两种状态 ——「采集到了」或「标记为未采集」，不留空白让人猜。

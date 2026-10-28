@@ -91,7 +91,7 @@ const snap = {
         id: 'demo-004', company: '示例网络', jobTitle: '战斗策划', salary: '16-22K', city: '成都',
         recruiter: '联系人D', recruiterTitle: 'HR', tier: 'A', status: 'sent',
         sentAt: '2026-10-28T12:00:00Z', draft: '您好，做过敌人 AI…', draftHash: 'h4',
-        sendResult: { status: 'sent', ok: true, tail: '已送达' },
+        sendResult: { status: 'sent', ok: true, tail: '已送达' }, readState: 'delivered',
       },
     ],
   },
@@ -209,6 +209,7 @@ check('带上条目 id', decide?.id === 'demo-001')
   const sentSnap = JSON.parse(JSON.stringify(snap))
   const target = sentSnap.approvals.items[1]
   target.status = 'sent'
+  target.readState = 'delivered'
   target.sentAt = '2026-10-28T11:40:04Z'
   target.sendResult = 'sent · 11:40 已送达'
   store = { getSnapshot: () => ({ loading: false, data: sentSnap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
@@ -216,9 +217,18 @@ check('带上条目 id', decide?.id === 'demo-001')
   const sentLine = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-sent-line'))[0]
   check('默认折叠「发出去了」', !!sentLine)
   sentLine.props.onClick()
+  const t4text = collect(t4).texts.join(' | ')
+  check('折叠行给出已读/未读计数', t4text.includes('sentLineRead'))
   const t5 = rerender()
   const logRows = findAll(t5, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-log'))
   check('展开后出现最近发送列表', logRows.length === 1)
+  // SentLog 的行在函数组件里按 useState 展开，遍历器每次重入都会重置成折叠态，
+// 所以这里只守源码契约：已发行必须带已读/未读徽标，且展开行给出计数。
+check(
+  '已发行状态标了已读/未读',
+  /readState === 'read' \? t\('readYes'\) : t\('readNo'\)/.test(src) &&
+    src.includes('sentLineRead'),
+)
   const clickable = findAll(t5, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props['data-clickable'] === 'true')
   check('最近发送的行也能点开', clickable.length >= 1)
   clickable[0].props.onClick()

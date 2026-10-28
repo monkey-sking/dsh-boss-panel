@@ -446,6 +446,9 @@ function createUiKit(React) {
       sentTitle: '已发出',
       sentLine: '已发出 {n} 条 · 待回 {wait} · 最后 {time}',
       sentLineMissing: '已发出 {n} 条 · 待回 {wait} · 未进会话 {missing} · 最后 {time}',
+      sentLineRead: '{read} 条已读 · {unread} 条未读（对方还没打开）',
+      readYes: '已读',
+      readNo: '未读',
       daysAgo: '{n} 天前',
       tierUnknown: '未评级',
       allLink: '全部 {n} 个会话 →',
@@ -623,6 +626,9 @@ function createUiKit(React) {
       sentTitle: 'Sent, awaiting reply',
       sentLine: '{n} sent · {wait} waiting · last {time}',
       sentLineMissing: '{n} sent · {wait} waiting · no thread {missing} · last {time}',
+      sentLineRead: '{read} read · {unread} unread (not opened yet)',
+      readYes: 'read',
+      readNo: 'unread',
       daysAgo: '{n} days ago',
       tierUnknown: 'Unrated',
       allLink: 'All {n} threads →',
@@ -1619,6 +1625,16 @@ function createUiKit(React) {
             { className: 'boss-sent-title' },
             replied ? t('sentTitle') : t('sentTitleNone'),
           ),
+          (() => {
+            const known = items.filter((item) => item.readState === 'read' || item.readState === 'delivered')
+            if (!known.length) return null
+            const read = known.filter((item) => item.readState === 'read').length
+            return h(
+              'span',
+              { className: 'boss-sent-meta' },
+              t('sentLineRead', { read, unread: known.length - read }),
+            )
+          })(),
           h(
             'span',
             { className: 'boss-sent-meta' },
@@ -1678,6 +1694,13 @@ function createUiKit(React) {
                 h('span', { className: 'boss-aq-co' }, item.company || '—'),
                 h('span', { className: 'boss-aq-job' }, item.jobTitle || ''),
                 h('span', { className: 'boss-aq-meta' }, humanTime(item.sentAt || item.decidedAt)),
+                item.status === 'sent'
+                  ? h(
+                      UI.Tag,
+                      { tone: item.readState === 'read' ? 'success' : 'outline' },
+                      item.readState === 'read' ? t('readYes') : t('readNo'),
+                    )
+                  : null,
                 item.threadState
                   ? null
                   : h(UI.Tag, { tone: 'warn', title: t('threadMissingHint') }, t('threadMissing')),
