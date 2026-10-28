@@ -61,6 +61,21 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py audit
 - `BLOCK`：pending/approved 缺 `jdText` / `jobId` / `draft` —— 这种条目**发不出去**，带 `exit 1`。
 
 
+## 4.5 已发出的条目怎么读（2026-10-29）
+
+`boss_approvals.json` 里的 `status='sent'` 只证明发送端把消息发进了 BOSS 的输入框并点了发送，
+**不证明对方会话里出现了这条消息**。面板用两个信号区分：
+
+| 信号 | 来源 | 面板表现 |
+| --- | --- | --- |
+| `threadState`（等对方 / 待你决定 / 已结束…） | `boss_threads_all.json` 按公司 join | 「最近发送」行显示相对时间 + 状态徽章 |
+| `threadState` 缺失 | 该公司还没出现在会话列表里 | 行尾加「会话未建立」徽章；统计行写「未进会话 N」 |
+
+「会话未建立」不等于发送失败：常见原因是对方还没点开、消息被折叠、或会话列表还没刷新。
+真失败会是 `status='failed'` + `sendResult` 带原因，两者别混。
+
+`sentAt` 取发送端结果行里的 `at`（ISO，UTC），面板按本地时区显示；同一批发送不再共用同一个时间戳。
+
 ## 5. 首触文案规则（2026-10-28 招聘方视角评审后定）
 
 评审实测：11 条首触里 9 条以「想确认…硬门槛吗」开场、5 条首句自曝「未上线/项目终止」、
