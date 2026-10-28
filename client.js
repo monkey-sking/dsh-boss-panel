@@ -436,15 +436,15 @@ function createUiKit(React) {
       pendingFailed: '标记失败：{message}',
       tabApproval: '审批',
       statApproval: '待审批',
-      approvalTitle: '首触审批',
-      approvalSub: '你点头，agent 才发',
+      approvalTitle: '待发首触',
+      approvalSub: '点「发送」= 把下面的草稿发给对方；点「不发」= 这条不再出现',
       approvalEmpty: '没有待审批的候选人 —— 今日候选都处理完了',
       approvalStale: '宿主还没加载审批数据 —— index.js 没重载，重启一次 DSH 后这里就会出现候选',
       approvalSendLog: '最近发送',
-      approvalSendLogSub: '发出去的首触与失败原因，最近 8 条',
+      approvalSendLogSub: '最近 8 条，带送达状态；点开看聊天和 JD',
       approvalSendLogEmpty: '还没有发出记录',
-      approvalActApprove: '通过',
-      approvalActSkip: '跳过',
+      approvalActApprove: '发送',
+      approvalActSkip: '不发',
       approvalChatNone: '这个岗位还没建会话；点「通过」后由发送端主动开聊',
       approvalNoJd: 'JD 没有存档，点下面的原链接看岗位页',
       approvalSummary: '待批 {pending} · 已通过待发 {approved} · 已发 {sent} · 跳过 {skipped}',
@@ -454,6 +454,9 @@ function createUiKit(React) {
       approvalApproved: '已通过，agent 发送时会回写结果',
       approvalSkipped: '已跳过',
       approvalRevoked: '已撤回为待审批',
+      approvalQueued: '已通过，发送端会在 10 分钟内用这条草稿发出；成功后这里会变成「已发送」',
+      replyNeeded: '该你回',
+      threadsHint: '「该你回」= 对方最后一句还没回；其余是等对方或已结束。点任意一行看完整聊天。',
       approvalFailed: '操作失败：{message}',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
@@ -565,15 +568,15 @@ function createUiKit(React) {
       pendingFailed: 'Mark failed: {message}',
       tabApproval: 'Approval',
       statApproval: 'To approve',
-      approvalTitle: 'First-touch approval',
-      approvalSub: 'Nothing is sent until you approve',
+      approvalTitle: 'First touches to send',
+      approvalSub: 'Send = deliver the draft below; Skip = this lead disappears',
       approvalEmpty: 'Nothing to approve — every candidate is handled',
       approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
       approvalSendLog: 'Recently sent',
-      approvalSendLogSub: 'Latest first-touch results and failures (8)',
+      approvalSendLogSub: 'Last 8, with delivery status; open one for chat and JD',
       approvalSendLogEmpty: 'Nothing sent yet',
-      approvalActApprove: 'Approve',
-      approvalActSkip: 'Skip',
+      approvalActApprove: 'Send',
+      approvalActSkip: 'Discard',
       approvalChatNone: 'No thread yet — sending will open the conversation',
       approvalNoJd: 'No archived JD — open the original posting below',
       approvalSummary: 'Waiting {pending} · Approved {approved} · Sent {sent} · Skipped {skipped}',
@@ -834,6 +837,7 @@ function createUiKit(React) {
       .boss-aq-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 
       /* 待审批条 + 最近发送：一个容器、每行两栏（依据 / 动作），不用表格以免和「等你回复」看串 */
+      .boss-section-hint { margin: 2px 0 8px; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
       .boss-aq-list { display: flex; flex-direction: column; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
       .boss-aq-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l4); }
       .boss-aq-item:last-child { border-bottom: 0; }
@@ -1046,7 +1050,12 @@ function createUiKit(React) {
           'data-clickable': 'true',
           onClick: () => onOpen(item.company),
         },
-        h('span', null, h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state)),
+        h(
+          'span',
+          null,
+          h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state),
+          side === 'them' ? h(UI.Tag, { tone: 'warn' }, t('replyNeeded')) : null,
+        ),
         h(
           'span',
           null,
@@ -1568,6 +1577,9 @@ function createUiKit(React) {
           ? h(
               React.Fragment,
               null,
+              status === 'approved' && !data.sendResult
+                ? h('div', { className: 'boss-ap-line' }, t('approvalQueued'))
+                : null,
               h(
                 'div',
                 { className: 'boss-aq-badge' },
@@ -1977,7 +1989,11 @@ function createUiKit(React) {
                       h(
                         'div',
                         { className: 'boss-section' },
-                        h(UI.SectionTitle, null, t('approvalTitle')),
+                        h(
+                          UI.SectionTitle,
+                          null,
+                          `${t('approvalTitle')}（${(data.approvals.items ?? []).filter((i) => i.status !== 'sent' && i.status !== 'skipped').length}）`,
+                        ),
                         h('span', { className: 'boss-section-count' }, t('approvalSub')),
                       ),
                       h(ApprovalQueue, {
@@ -1995,24 +2011,6 @@ function createUiKit(React) {
                         h('span', { className: 'boss-section-count' }, t('approvalSendLogSub')),
                       ),
                       h(SentLog, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
-                    )
-                  : null,
-                pendingVisible.length
-                  ? h(
-                      'div',
-                      null,
-                      h(
-                        'div',
-                        { className: 'boss-section' },
-                        h(UI.SectionTitle, null, t('pendingTitle')),
-                        h('span', { className: 'boss-section-count' }, t('pendingSub')),
-                      ),
-                      h(PendingRows, {
-                        items: pendingVisible,
-                        t,
-                        onOpen: open,
-                        onMark: markPending,
-                      }),
                     )
                   : null,
                 h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('stateDist'))),
@@ -2111,6 +2109,7 @@ function createUiKit(React) {
                     { className: 'boss-section-count' },
                     `${threads.length} / ${counts.threads ?? 0}`,
                   ),
+                  h('div', { className: 'boss-section-hint' }, t('threadsHint')),
                 ),
                 h(
                   'div',
