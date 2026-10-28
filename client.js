@@ -359,6 +359,7 @@ function createUiKit(React) {
       panel: '招聘',
       title: 'BOSS 直聘 · 求职面板',
       intro: '今天要办的事：谁在等我回、今天该发谁、发出去的有没有人回。',
+      footBuild: '面板 {v} · 宿主启动 {boot} · 数据更新 {data}',
       refresh: '刷新',
       loading: '加载中…',
       empty: '还没读到快照 —— 点右上「刷新」；还是空就说明后台采集没在跑',
@@ -554,6 +555,7 @@ function createUiKit(React) {
       panel: 'Recruiting',
       title: 'BOSS Zhipin · Job panel',
       intro: 'Threads, replies owed, and interviews, read from local job-search snapshots. Read-only.',
+      footBuild: 'panel {v} · host boot {boot} · data {data}',
       refresh: 'Refresh',
       loading: 'Loading…',
       empty: 'No snapshot yet — hit Refresh; if still empty the collector is not running',
@@ -897,6 +899,7 @@ function createUiKit(React) {
       .boss-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
       .boss-title { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
       .boss-intro { margin: 4px 0 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+      .boss-foot { margin: 10px 0 2px; font-size: 11px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
       .boss-head-side { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
       .boss-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
       .boss-daily { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); border-radius: 8px; padding: 12px 16px; font-size: 13px; line-height: 20px; }
@@ -2189,6 +2192,17 @@ function createUiKit(React) {
               null,
               h('h2', { className: 'boss-title' }, t('title')),
               h('p', { className: 'boss-intro' }, t('intro')),
+              // 面板和宿主是两份代码：改了 index.js 不重启，界面还是旧的。
+              // 把「宿主版本 / 启动时刻 / 数据时间」摆出来，省得再靠猜。
+              h(
+                'p',
+                { className: 'boss-foot' },
+                t('footBuild', {
+                  v: data.host?.version ?? '?',
+                  boot: data.host?.bootAt ? humanTime(data.host.bootAt) : '?',
+                  data: data.updatedAt ? humanTime(data.updatedAt) : '?',
+                }),
+              ),
             ),
             h(
               'div',

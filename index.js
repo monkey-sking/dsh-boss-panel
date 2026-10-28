@@ -31,6 +31,8 @@ export const name = 'dsh-boss-panel'
 
 /** 客户端读取面板数据的唯一 HTTP 入口。 */
 export const RPC_PATH = '/api/boss-panel.rpc'
+export const PANEL_VERSION = '0.6.0'
+const HOST_BOOT_AT = new Date().toISOString()
 
 const DEFAULT_DATA_DIR = path.join(
   os.homedir(),
@@ -1239,6 +1241,7 @@ export async function buildSnapshot(options = {}) {
 
   return {
     version,
+    host: { version: PANEL_VERSION, pid: process.pid, bootAt: HOST_BOOT_AT },
     updatedAt: toIso(merged.ts),
     dataQuality: {
       dataAgeMin,

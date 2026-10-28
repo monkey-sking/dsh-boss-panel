@@ -11,6 +11,9 @@ const empty = await mkdtemp(path.join(tmpdir(), 'boss-snap-'))
 try {
   const s = await buildSnapshot({ dataDir: empty })
   assert.equal(typeof s, 'object', 'buildSnapshot should return an object')
+  // 宿主版本/启动时刻要能读出来：面板最常踩的坑是「看到的是旧宿主」。
+  assert.equal(typeof s.host?.version, 'string', 'snapshot should expose host version')
+  assert.ok(s.host?.bootAt, 'snapshot should expose host boot time')
   assert.ok(Array.isArray(s.threads ?? []), 'threads should be an array')
   console.log('SNAP OK (empty dir): threads =', (s.threads ?? []).length)
 } finally {
