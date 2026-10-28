@@ -9,10 +9,18 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { markApproval } from '../index.js'
 
-const SCRIPT = '/Users/runking/.local/share/dsh-runtime/scripts/boss_approvals.py'
+const SCRIPT =
+  process.env.BOSS_APPROVALS_CLI ||
+  path.join(process.env.HOME || '', '.local/share/dsh-runtime/scripts/boss_approvals.py')
+if (!existsSync(SCRIPT)) {
+  console.log('SKIP 找不到 boss_approvals.py（设置 BOSS_APPROVALS_CLI 指向它）')
+  process.exit(0)
+}
+
 const STATUSES = ['pending', 'approved', 'sent', 'skipped', 'failed']
 
 let ok = true
