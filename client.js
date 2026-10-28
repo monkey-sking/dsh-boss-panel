@@ -510,6 +510,8 @@ function createUiKit(React) {
       approvalPeekFirst: '先打开这一条看一眼 JD 和草稿，再点发送',
       approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
       approvalsCorrupt: '审批文件一时读不出来（可能后台正在写），下面的待发列表不是真实状态 —— 稍等会自动恢复',
+      hardGateChip: 'JD 硬门槛',
+      hardGateWarn: 'JD 写明了硬性条件，先确认你够得上再发',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
       approvalStatusSent: '已发送',
@@ -677,6 +679,8 @@ function createUiKit(React) {
       approvalPeekFirst: 'Open this item first, then hit send',
       approvalGone: 'This item is no longer in the queue — refreshed',
       approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
+      hardGateChip: 'JD hard gate',
+      hardGateWarn: 'The JD states a hard requirement — confirm you qualify before sending',
       approvalStatusPending: 'Waiting',
       approvalStatusApproved: 'Approved · queued',
       approvalStatusSent: 'Sent',
@@ -1509,7 +1513,14 @@ function createUiKit(React) {
                   item.threadState
                     ? h('span', { className: 'boss-aq-state' }, `${item.threadState}${item.threadTime ? ' · ' + item.threadTime : ''}`)
                     : null,
+                  // JD 里有「必须有卡牌实战」这类一票否决时，在点之前就摆出来。
+                  item.hardGate
+                    ? h('span', { className: 'boss-aq-gate', title: item.hardGate }, t('hardGateChip'))
+                    : null,
                 ),
+                item.hardGate
+                  ? h('div', { className: 'boss-aq-gate-text' }, `${t('hardGateWarn')}：${item.hardGate}`)
+                  : null,
                 h('div', { className: 'boss-aq-draft', title: item.draft || '' }, clip(item.draft || item.gap || '')),
               ),
               h('div', { className: 'boss-aq-acts' }, acts),

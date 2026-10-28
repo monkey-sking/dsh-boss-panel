@@ -1198,6 +1198,22 @@ export async function buildSnapshot(options = {}) {
 // 用户在卡片上点「通过并发送」→ 状态写 approved → agent 侧 runner 看到 approved
 // 才允许调 boss_outbox.sh 真发。draft 与 draftHash 一起存，改过文案就必须重新审批。
 // ---------------------------------------------------------------------------
+// 与 boss_approvals.py 的 HARDGATE 同源：投之前先把 JD 里的硬性条件摆出来，
+// 别等发完才发现「必须有放置卡牌实战」这种一票否决（招聘方评审实测 11 条里 5 条撞这个）。
+const HARDGATE = [
+  /必须(?:有|具备|做过|是).{0,24}(卡牌|放置|SLG|MMO|已上线|上线项目|同品类)/,
+  /硬性(?:要求|条件)/,
+  /(?:至少|不少于).{0,8}年.{0,12}(卡牌|放置|同品类|上线项目)/,
+]
+const hardGateOf = (jd) => {
+  const text = String(jd ?? '')
+  for (const pattern of HARDGATE) {
+    const hit = pattern.exec(text)
+    if (hit) return hit[0].slice(0, 60)
+  }
+  return ''
+}
+
 const APPROVAL_STATUSES = ['pending', 'approved', 'skipped', 'sent', 'failed']
 const APPROVAL_STATUS_ORDER = { approved: 0, pending: 1, failed: 2, sent: 3, skipped: 4 }
 
@@ -1223,6 +1239,7 @@ function normalizeApproval(item) {
     gap: String(item.gap ?? '').trim(),
     draft: String(item.draft ?? '').trim(),
     jdText: String(item.jdText ?? '').trim(),
+    hardGate: String(item.hardGate ?? hardGateOf(item.jdText)).trim(),
     draftHash: String(item.draftHash ?? '').trim(),
     status: APPROVAL_STATUSES.includes(status) ? status : 'pending',
     addedAt: toIso(item.addedAt),
