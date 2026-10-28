@@ -81,6 +81,7 @@ const snap = {
         id: 'demo-002', company: '样本互娱', jobTitle: '技术策划', salary: '18-25K', city: '杭州',
         recruiter: '联系人B', recruiterTitle: '制作人', tier: 'B', status: 'pending',
         evidence: '工具链与蓝图调试', gap: '岗位偏工具', draft: '您好，我在项目里做过蓝图调试工具…', draftHash: 'h2',
+        lint: ['no_next_step'],
       },
       {
         id: 'demo-003', company: '样例网络', jobTitle: '战斗数值', salary: '15-20K', city: '长沙',
@@ -185,6 +186,9 @@ await new Promise((r) => setTimeout(r, 20))
 const decide = calls.find((c) => c.op === 'approval_decide')
 check('点击后 POST approval_decide', !!decide && decide.status === 'approved')
 check('带上条目 id', decide?.id === 'demo-001')
+
+// 文案 lint 要在「点发送之前」就能看见（导入时算好，面板只负责显示）。
+check('草稿硬伤在行内可见', src.includes("t('draftIssues'") && src.includes('item.lint'))
 
 // —— 6) 已通过的条目：行上有状态、弹窗里只剩「撤回」 ——
 {

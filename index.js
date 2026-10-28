@@ -1334,6 +1334,9 @@ function normalizeApproval(item) {
     approvedAt: toIso(item.approvedAt),
     sentAt: toIso(item.sentAt),
     sendResult: item.sendResult && typeof item.sendResult === 'object' ? item.sendResult : null,
+    // 导入时跑过的文案 lint（self_doubt/ask_qualify/no_next_step/too_long…）。
+    // 放到面板上是为了「点发送之前」就能看见，而不是等对方不回来才复盘。
+    lint: Array.isArray(item.lint) ? item.lint.map(String).slice(0, 8) : [],
     note: String(item.note ?? '').trim(),
   }
 }
