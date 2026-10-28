@@ -79,7 +79,7 @@
 ```
 
 - **pending**：agent 刚写的候选，面板显示「发出这条 / 不发」。
-- **approved**：用户点了通过（写 `approvedAt`）。此后 10 分钟内会被 `boss_approval_runner.py` 捞走。
+- **approved**：用户点了通过（写 `approvedAt`）。此后 30 分钟内（`APPROVAL_TTL`，超时自动退回 pending 并标 `approval_expired`）会被 `boss_approval_runner.py` 捞走。
 - **skipped**：用户主动不发，不再出现在默认排序前面。
 - **sent / failed**：只有发送侧（`boss_approvals.py settle`）能写，面板只能「收回」回 pending。
 - 收回语义：用户点「收回」= 把 approved/skipped/failed 退回 pending，已发出的（sent）不回退，

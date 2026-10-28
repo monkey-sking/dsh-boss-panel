@@ -97,7 +97,16 @@ try {
   const changed = JSON.parse(run('queue', '--out', path.join(dir, 'queue3.json')))
   assert.equal(changed.queue, 0, '草稿改动后不能进队列')
 
-  console.log('E2E OK: pending → approved → queue → sent → 今日发出=1；过期批准与改动草稿都被拦')
+  // 发送失败（failed）后用户唯一动作是「重新发送」：CLI 必须能把 failed 退回 pending，
+  // 否则面板点了只会报 invalid_transition，只能手改 JSON。
+  const doc3 = JSON.parse(await readF(file, 'utf8'))
+  doc3.items.find((x) => x.id === 'e2e-001').status = 'failed'
+  await writeF(file, JSON.stringify(doc3))
+  run('mark', '--id', 'e2e-001', '--status', 'pending')
+  const back = JSON.parse(await readF(file, 'utf8'))
+  assert.equal(back.items.find((x) => x.id === 'e2e-001').status, 'pending', 'failed 要能退回 pending')
+
+  console.log('E2E OK: pending → approved → queue → sent → 今日发出=1；过期批准/改动草稿被拦；failed 可退回')
 } finally {
   await rm(dir, { recursive: true, force: true })
 }

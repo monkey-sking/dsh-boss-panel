@@ -966,6 +966,7 @@ function createUiKit(React) {
       .boss-aq-job { font-size: 13px; color: var(--dsw-alias-label-secondary); }
       .boss-aq-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
       .boss-aq-state { font-size: 12px; color: var(--dsw-alias-label-secondary); padding-left: 8px; border-left: 1px solid var(--dsw-alias-border-l2); }
+      .boss-aq-expired { color: var(--dsw-alias-state-warn-primary, #8a6d00); }
       .boss-aq-draft { font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
       .boss-aq-acts { display: flex; align-items: center; gap: 6px; flex: none; }
       .boss-aq-log .boss-aq-item { padding: 8px 12px; }
@@ -1501,7 +1502,14 @@ function createUiKit(React) {
                 item.hardGate
                   ? h('div', { className: 'boss-aq-gate-text' }, `${t('hardGateWarn')}：${item.hardGate}`)
                   : null,
-                h('div', { className: 'boss-aq-draft', title: item.draft || '' }, clip(item.draft || item.gap || '')),
+                h(
+                  'div',
+                  { className: 'boss-aq-draft', title: item.draft || '' },
+                  /approval_expired/.test(String(item.note || ''))
+                    ? h('span', { className: 'boss-aq-expired' }, t('approvalExpired') + ' · ')
+                    : null,
+                  clip(item.draft || item.gap || ''),
+                ),
               ),
               h('div', { className: 'boss-aq-acts' }, acts),
             )

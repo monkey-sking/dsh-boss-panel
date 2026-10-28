@@ -1532,7 +1532,18 @@ async function markApprovalUnlocked(id, status, options = {}) {
   const FROM = {
     approved: ['pending', 'failed'],
     skipped: ['pending', 'approved'],
-    pending: ['approved', 'skipped'],
+    // failed 也要能回 pending：发送失败后用户唯一的动作是「重新发送」，
+    // 如果这里不允许，按钮点了只会弹 invalid_transition，只能手改 JSON。
+    pending: ['approved', 'skipped', 'failed'],
+  }
+  // 跨进程冲突：runner 结算（sent）与面板决策可能同时发生，面板这边读的是
+  // 内存里的旧 doc，直接整文件写回会把刚写好的 sent 覆盖成 pending/approved ——
+  // 下一轮就会再发一次。写前确认文件没被别人改过。
+  let beforeMtime = 0
+  try {
+    beforeMtime = (await fs.stat(file)).mtimeMs
+  } catch {
+    beforeMtime = 0
   }
   const hit = items.find((item) => item && typeof item === 'object' && String(item.id ?? '') === String(id))
   if (!hit) throw operationError('not_found', `审批队列里没有这一条：${String(id)}`)
@@ -1553,6 +1564,14 @@ async function markApprovalUnlocked(id, status, options = {}) {
   } else {
     delete hit.approvedAt
     delete hit.approvedDraftHash
+  }
+  try {
+    const nowMtime = (await fs.stat(file)).mtimeMs
+    if (beforeMtime && nowMtime !== beforeMtime) {
+      throw operationError('conflict', '这条刚被后台更新过（可能已发出），刷新后再操作')
+    }
+  } catch (err) {
+    if (err && err.code === 'conflict') throw err
   }
   await backupApprovalsDaily(file)
   await writeJsonAtomic(file, { ...doc, items, ts: at })

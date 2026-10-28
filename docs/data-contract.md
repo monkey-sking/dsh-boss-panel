@@ -116,3 +116,15 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py lint
 `boss_approvals.json`，`python3 boss_approvals.py stats` 核对条数后再启用任务。
 
 不会备份的：发送结果为空的中间态、已过期（30 分钟）的 approved 记录——它们本来就不该发。
+
+## 7. 防重复与冲突（2026-10-29 QA 评审后补）
+
+| 场景 | 之前会怎样 | 现在的约束 |
+| --- | --- | --- |
+| 派出去了但没拿到结果（浏览器崩/登录过期） | 条目留在 approved，下一轮原样重派；真实事故里同一 id 被派 3 次 | `boss_approval_runner.py` 记 `~/.hermes/state/boss_approvals_dispatch.json`，同一 id 30 分钟内不再派（`BOSS_REDISPATCH_MIN`），打 `GUARD` + 审计 `redispatch_skip` |
+| 面板决策与 runner 结算同时发生 | 面板整文件写回，把刚写好的 `sent` 覆盖回 `pending/approved`，下一轮再发一次 | 写前比对文件 mtime，变了抛 `conflict`，面板提示「刚被后台更新过，刷新再看」 |
+| 审批文件损坏 | runner 当「本轮跳过」exit 0，调度全绿，用户以为今天没待发 | 先把现场备份到 `~/.hermes/state/boss_approvals.corrupt-<时间>.json`，再 exit 2 |
+| 两个 runner 实例 | 锁在 `$TMPDIR`，不同 TMPDIR 各拿一把锁，审计出现同一秒两个实例 | 锁固定在 `~/.hermes/state/boss-approval-runner.lock` |
+| 发送失败后想重试 | 面板只有「收回」，后端不允许 `failed → pending`，点了必报错 | 面板与 CLI 都允许 `failed → pending`（`sent` 仍不可回退） |
+| 文案改过但指纹没重算 | 体检全绿，点发送才被拦 | `audit` 比对 `draftHash` 与文案、`approvedDraftHash` 与当前文案，不一致算 BLOCK |
+| 结果行缺 `at` | 用结算时刻冒充发送时刻，整批同一秒 | 写 `sentAtSource: "settle_fallback"`，不再假装是真实发送时间 |

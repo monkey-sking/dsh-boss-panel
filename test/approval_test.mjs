@@ -64,7 +64,7 @@ plugin.apply({
 })
 const panel = registrations.find((r) => r.meta.name === 'main')
 
-const { buildSnapshot, buildApprovalDetail } = await import('../index.js')
+const { buildSnapshot, buildApprovalDetail, markApproval } = await import('../index.js')
 const liveSnap = await buildSnapshot()
 const snap = {
   ...liveSnap,
@@ -245,6 +245,39 @@ check(
   check('approval_detail 返回 JD 正文字段', typeof detail.jdText === 'string' && detail.jdText.length > 50)
   check('approval_detail 返回公司详情', !!detail.companyDetail)
   check('approval_detail 带完整聊天字段', Array.isArray(detail.msgs) && detail.msgs.length <= 400)
+}
+
+// —— 面板状态机：failed 能回 pending（否则「重新发送」点了只会报错），sent 不能回退 ——
+{
+  const { mkdtemp, writeFile } = await import('node:fs/promises')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'boss-sm-'))
+  const file = path.join(dir, 'boss_approvals.json')
+  const seed = {
+    ts: '2026-10-29T00:00:00Z',
+    items: [
+      { id: 'sm-failed', company: '示例甲', status: 'failed', draft: 'x', draftHash: 'h' },
+      { id: 'sm-sent', company: '示例乙', status: 'sent', draft: 'y', draftHash: 'h2' },
+      { id: 'sm-approved', company: '示例丙', status: 'approved', draft: 'z', draftHash: 'h3' },
+    ],
+  }
+  await writeFile(file, JSON.stringify(seed), 'utf8')
+  const okFailed = await markApproval('sm-failed', 'pending', { dataDir: dir }).then(
+    (r) => r.ok === true,
+    () => false,
+  )
+  check('failed 可以撤回成待定', okFailed)
+  const sentBack = await markApproval('sm-sent', 'pending', { dataDir: dir }).then(
+    () => false,
+    (e) => e?.code === 'invalid_transition' || /invalid_transition|不能从/.test(String(e?.message || e)),
+  )
+  check('sent 不能退回待定', sentBack)
+  const approvedOk = await markApproval('sm-approved', 'pending', { dataDir: dir }).then(
+    (r) => r.ok === true,
+    () => false,
+  )
+  check('approved 可以收回', approvedOk)
 }
 
 console.log(ok ? 'APPROVAL OK' : 'APPROVAL INCOMPLETE')

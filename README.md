@@ -208,7 +208,7 @@ node test/e2e_flow.mjs        # 端到端：JS 宿主 + Python 发送侧的契�
   与 `~/.hermes/state/boss_*.json` 为 `0600`；面板与脚本写入都走「临时文件 + rename」并用 `0600`。
   队列/结果文件 `approval_queue_*.json` / `approval_result_*.json` 保留 7 天后自动清。
 - **盲发拦截**：行内「发送」必须先打开过一次该条详情（看过 JD/草稿/对话），否则自动打开弹窗并提示；
-  弹窗里常驻「10 分钟内自动发出；发出后不能收回」。
+  弹窗里常驻「10 分钟内自动发出；发出后不能收回」。授权有效期是 30 分钟（超时自动退回待定，并在行内标「授权过期，请重新确认」）。
 
 发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`，**不可覆盖**）与
 `boss_shortlist_gate.py`（首触缺 `job`/`jd` 直接拒发）。首触且无历史会话时，
