@@ -445,6 +445,7 @@ function createUiKit(React) {
       kpiFailed: '发送失败',
       sentTitle: '已发出',
       sentLine: '已发出 {n} 条 · 待回 {wait} · 最后 {time}',
+      sentLineMissing: '已发出 {n} 条 · 待回 {wait} · 未进会话 {missing} · 最后 {time}',
       daysAgo: '{n} 天前',
       tierUnknown: '未评级',
       allLink: '全部 {n} 个会话 →',
@@ -482,6 +483,8 @@ function createUiKit(React) {
       approvalStale: '面板比后台旧，读不到待发数据 —— 重启一次 DSH 就会显示',
       approvalSendLog: '最近发送',
       approvalSendLogSub: '最近 8 条，带送达状态；点开看聊天和 JD',
+      threadMissing: '会话未建立',
+      threadMissingHint: '发出去了，但会话列表里还没有这家 —— 对方可能还没点开，或消息被折叠',
       approvalSendLogEmpty: '还没有发出记录',
       approvalActApprove: '发送',
       approvalActSkip: '不发',
@@ -618,6 +621,7 @@ function createUiKit(React) {
       kpiFailed: 'Failed',
       sentTitle: 'Sent, awaiting reply',
       sentLine: '{n} sent · {wait} waiting · last {time}',
+      sentLineMissing: '{n} sent · {wait} waiting · no thread {missing} · last {time}',
       daysAgo: '{n} days ago',
       tierUnknown: 'Unrated',
       allLink: 'All {n} threads →',
@@ -649,6 +653,8 @@ function createUiKit(React) {
       approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
       approvalSendLog: 'Recently sent',
       approvalSendLogSub: 'Last 8, with delivery status; open one for chat and JD',
+      threadMissing: 'No thread',
+      threadMissingHint: 'Sent, but no chat row yet — the recruiter may not have opened it',
       approvalSendLogEmpty: 'Nothing sent yet',
       approvalActApprove: 'Send',
       approvalActSkip: 'Discard',
@@ -1592,6 +1598,10 @@ function createUiKit(React) {
         String(b.sentAt || b.decidedAt || '').localeCompare(String(a.sentAt || a.decidedAt || '')),
       )
       const last = formatWhen(sorted[0]?.sentAt || sorted[0]?.decidedAt)
+      const missing = items.filter((item) => !item.threadState).length
+      const headline = missing
+        ? t('sentLineMissing', { n: items.length, wait: waiting, missing, time: last })
+        : t('sentLine', { n: items.length, wait: waiting, time: last })
       return h(
         'div',
         { className: 'boss-section' },
@@ -1610,7 +1620,7 @@ function createUiKit(React) {
           h(
             'span',
             { className: 'boss-sent-meta' },
-            t('sentLine', { n: items.length, wait: waiting, time: last }),
+            headline,
           ),
           h('span', { className: 'boss-sent-toggle' }, expanded ? '▾' : '▸'),
         ),
@@ -1665,7 +1675,10 @@ function createUiKit(React) {
                 ),
                 h('span', { className: 'boss-aq-co' }, item.company || '—'),
                 h('span', { className: 'boss-aq-job' }, item.jobTitle || ''),
-                h('span', { className: 'boss-aq-meta' }, formatWhen(item.sentAt || item.decidedAt)),
+                h('span', { className: 'boss-aq-meta' }, humanTime(item.sentAt || item.decidedAt)),
+                item.threadState
+                  ? null
+                  : h(UI.Tag, { tone: 'warn', title: t('threadMissingHint') }, t('threadMissing')),
               ),
               sendText(item)
                 ? h('div', { className: 'boss-aq-draft' }, sendText(item).slice(0, 120))
