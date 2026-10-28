@@ -31,12 +31,16 @@ deepseek HARNESS
 
 | Tab | 内容 |
 | --- | --- |
-| **审批**（2026-10-28） | 待发送的首触候选卡：证据／缺口／草稿 → 展开看 JD 全文、公司详情、完整聊天记录 → 「通过并发送 / 跳过」 |
-| **概览** | 今日简报 → 6 张统计卡 → 状态分布条（8 状态按占比铺色带 + 图例）→ 双栏（需要行动 / 近期面试）→ 最近 14 天沟通柱 |
+| **概览** | 今日简报 → 7 张统计卡（首张是待审批）→ 状态分布条 → 待审批候选表 → 双栏（需要行动 / 近期面试）→ 最近 14 天沟通柱 |
 | **面试** | 面试日程表（7 列 + 天差 chip） |
 | **会话** | 搜索框 + 状态多选 chips + 5 列会话表 |
 
 「需要行动」只列 `待你决定` / `已读不回`，最多 6 条；点任一行打开详情弹窗。
+
+**首触审批不单开 Tab**（2026-10-28 返工）：概览里「待你拍板」上方是一张紧凑的待审批表
+（档位｜公司·岗位·对接人｜薪资·城市｜草稿首句），点行复用同一个详情弹窗 —— 弹窗里依次是
+状态徽标、岗位/公司 kv、证据与缺口、首触文案、**完整聊天记录**、**JD 全文**（带原链接），
+底部按状态给「通过并发送 / 跳过」或「撤回」。展开式卡片和独立 Tab 都已删除。
 
 ## 面板内容（0.2.0 之前的单页版）
 
@@ -62,7 +66,7 @@ deepseek HARNESS
 面板**只写两处状态**，其余求职数据只读、不调模型、不触发探针：
 
 - `boss_pending_decisions.json` — 概览「待你拍板」区块的 已发/忽略（`op=pending_mark`，2026-10-25 起）
-- `boss_approvals.json` — 审批 Tab 的 通过/跳过/撤回（`op=approval_decide`，2026-10-28 起）
+- `boss_approvals.json` — 概览里待审批行的 通过/跳过/撤回（`op=approval_decide`，2026-10-28 起）
 
 文件按 mtime 缓存，只有变了才重读。
 面板打开期间每 15 秒轮询一次；关掉面板即停表。
@@ -118,7 +122,7 @@ plugin_manager install_bundle target=<你的插件目录>/dsh-boss-panel
 
 ```
 node test/render_test.mjs     # 有状态渲染测试：驱动三个 Tab 切换，15 项断言
-node test/approval_test.mjs   # 审批 Tab：12 张卡、通过/跳过按钮、点通过真的 POST approval_decide
+node test/approval_test.mjs   # 审批流：合成快照 3 条 → 概览队列行、点行开弹窗、点通过真的 POST approval_decide
 node test/detail_test.mjs     # detail op 字段与聊天记录
 ```
 
@@ -152,7 +156,7 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
 1. **agent 写候选** → `boss_approvals.py add --json items.json`
    条目：`{id,date,company,jobTitle,salary,city,jobId,tier,evidence,gap,draft,draftHash,jdText,status}`
    `id` 形如 `20261028-<公司>-<encryptJobId>`，`draftHash` 自动算（sha1 前 16 位）。
-2. **用户在审批 Tab 点「通过并发送」** → `op=approval_decide` 把 `status` 改成 `approved` 并写 `approvedAt`；
+2. **用户在概览的待审批行点开弹窗，点「通过并发送」** → `op=approval_decide` 把 `status` 改成 `approved` 并写 `approvedAt`；
    点「跳过」写 `skipped`；已决策的卡可「撤回」回 `pending`。`sent/failed` 只能由发送侧写，面板无权。
 3. **`boss_approval_runner.py` 每 10 分钟扫一次**（noagent 任务 `boss-approval-send`）：
    只挑 `approved` 且 `draftHash` 仍与草稿一致的条目 → 生成发件箱队列 → `BOSS_OUTBOX_CONFIRMED=1`
@@ -166,6 +170,19 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
 发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`）与
 `boss_shortlist_gate.py`（首触缺 `job`/`jd` 直接拒发）。首触且无历史会话时，
 `boss_outbox_send.js` 会先用 `item.jobId` 打开 JD 页点「立即沟通」再发。
+
+### 发送链的坑（2026-10-28 实测，改之前先看）
+
+`ego-browser` 是**常驻 daemon**，`ego_run.sh nodejs` 的脚本跑在 daemon 进程里，因此：
+
+- **调用方的环境变量传不进去**（`BOSS_OUTBOX_CONFIRMED=1` 在脚本里是 `undefined`，daemon 里还可能残留很久以前的 `BOSS_OUTBOX_FILE`）；
+- `ego_run.sh` 会把 `--xxx` 参数当自己的选项 `shift` 掉，后面的值反被当成脚本路径（报 `脚本不存在: /tmp/xxx.json`）。
+
+所以确认信息只能走文件：
+
+- `~/.hermes/state/boss_outbox_current.json` — `boss_outbox.sh start` 写的 `{queue,result,log,at}`，脚本**优先**读它（env/argv 只作手工直跑兜底）；
+- `~/.hermes/state/boss_outbox_confirm.json` — 一次性令牌 `{queue,sha256,at,expires}`，读后即删，校验队列路径、内容指纹、10 分钟时效；
+- `start` 前有 `pgrep -f boss_outbox_send.js` 串行闸门，另一个发送进程在跑就直接 `OUTBOX_BUSY` exit 3。
 
 CLI 速查：
 

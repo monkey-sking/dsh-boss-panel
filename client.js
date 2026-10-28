@@ -805,26 +805,20 @@ function createUiKit(React) {
       .boss-cm[data-mine="false"] { margin-right: 32px; }
       .boss-cm-tag { font-size: 10.5px; color: var(--dsw-alias-label-secondary); margin-right: 6px; }
 
-      /* —— 审批卡片 —— */
-      .boss-ap { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-      .boss-ap-summary { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); display: flex; gap: 10px; flex-wrap: wrap; }
+      /* —— 审批队列（概览内嵌）与审批弹窗 —— */
+      .boss-aq-head { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); margin: 4px 0 8px; display: flex; gap: 10px; flex-wrap: wrap; }
+      .boss-aq-tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+      .boss-aq-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+      .boss-aq-row[data-status="approved"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-success-primary); }
+      .boss-aq-row[data-status="failed"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
       .boss-ap-notice { color: var(--dsw-alias-brand-primary); }
-      .boss-ap-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-      .boss-ap-card[data-status="approved"] { border-color: var(--dsw-alias-state-success-primary); }
-      .boss-ap-card[data-status="failed"] { border-color: var(--dsw-alias-state-error-primary); }
-      .boss-ap-card[data-status="skipped"] { opacity: .6; }
-      .boss-ap-head { display: flex; flex-direction: column; gap: 3px; }
-      .boss-ap-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .boss-ap-job { font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
       .boss-ap-line { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
       .boss-ap-line b { color: var(--dsw-alias-label-primary); font-weight: 500; }
       .boss-ap-gap { color: var(--dsw-alias-state-warn-primary); }
       .boss-ap-result { color: var(--dsw-alias-state-error-primary); }
+      .boss-ap-draft-block { margin-top: 10px; }
       .boss-ap-draft { font-size: 12.5px; line-height: 20px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; word-break: break-word; }
       .boss-ap-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .boss-ap-spacer { flex: 1 1 auto; }
-      .boss-ap-detail { border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 10px; display: flex; flex-direction: column; gap: 12px; }
-      .boss-ap-sec { display: flex; flex-direction: column; gap: 4px; }
       .boss-ap-jd { margin: 0; font-size: 12px; line-height: 19px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
       .boss-ap-link { font-size: 12px; color: var(--dsw-alias-brand-primary); text-decoration: none; }
 
@@ -1246,11 +1240,11 @@ function createUiKit(React) {
     }
 
     /**
-     * 审批卡片：一条候选 = 一个卡片。
+     * 待审批队列：概览页里的一张紧凑表（2026-10-28 返工）。
      *
-     * 2026-10-28 用户要求「面板上加聊天记录、JD 详情、公司详情，给我审批按钮，
-     * 我切换状态，你检测到能发就发」。所以卡片默认只显示判断依据（证据/缺口/草稿），
-     * 点「展开」才去拉 JD 正文、公司信息与完整聊天记录 —— 轮询不背这些大文本。
+     * 用户明确要求「别单独开 Tab、别把详情摊在列表里 —— 弹窗我们本来就有」，
+     * 所以这里只保留判断依据（档位 / 公司岗位 / 薪资城市 / 草稿首句），
+     * JD 全文、公司详情、完整聊天记录一律进 ApprovalModal。
      */
     const APPROVAL_TONE = {
       pending: 'info',
@@ -1267,191 +1261,210 @@ function createUiKit(React) {
       failed: 'approvalStatusFailed',
     }
 
-    function ApprovalCard({ item, t, onDecide, busy }) {
-      const [open, setOpen] = React.useState(false)
-      const [detail, setDetail] = React.useState({ loading: false, data: null, error: null })
+    function ApprovalQueue({ approvals, t, onOpen, notice }) {
+      // 旧宿主（index.js 未重载）的快照里没有 approvals 字段：说清楚，别让人以为是空池。
+      if (!approvals) {
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalStale')))
+      }
+      const stats = approvals.stats ?? {}
+      const rows = (approvals.items ?? []).filter(
+        (item) => item.status !== 'sent' && item.status !== 'skipped',
+      )
+      const head = h(
+        'div',
+        { className: 'boss-aq-head' },
+        t('approvalSummary', {
+          pending: stats.pending ?? 0,
+          approved: stats.approved ?? 0,
+          sent: stats.sent ?? 0,
+          skipped: stats.skipped ?? 0,
+        }),
+        notice ? h('span', { className: 'boss-ap-notice' }, notice) : null,
+      )
+      if (!rows.length) {
+        return h('div', null, head, h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalEmpty'))))
+      }
+      return h(
+        'div',
+        null,
+        head,
+        h(
+          'div',
+          { className: 'boss-action boss-aq' },
+          rows.map((item) =>
+            h(
+              'div',
+              {
+                key: item.id,
+                className: 'boss-action-row boss-aq-row',
+                'data-clickable': 'true',
+                'data-status': item.status,
+                onClick: () => onOpen(item.id),
+              },
+              h(
+                'div',
+                { className: 'boss-aq-tags' },
+                h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier || 'B'),
+                item.status === 'pending'
+                  ? null
+                  : h(
+                      UI.Tag,
+                      { tone: APPROVAL_TONE[item.status] ?? 'outline' },
+                      t(APPROVAL_LABEL[item.status] ?? 'approvalStatusPending'),
+                    ),
+              ),
+              h(
+                'div',
+                { className: 'boss-action-main' },
+                h('div', { className: 'boss-co', title: item.company }, item.company || '—'),
+                h('div', { className: 'boss-sub' }, [item.jobTitle, item.recruiter].filter(Boolean).join(' · ')),
+              ),
+              h('span', { className: 'boss-sub' }, [item.salary, item.city].filter(Boolean).join(' · ') || '—'),
+              h('span', { className: 'boss-action-msg', title: item.draft || '' }, clip(item.draft || item.gap || '')),
+            ),
+          ),
+        ),
+      )
+    }
+
+    /**
+     * 审批弹窗：点击队列行才拉全文（JD / 公司 / 完整聊天），复用 ui-kit 的 Modal。
+     * 底部三个动作：通过并发送（只改状态，agent 侧 runner 轮询到 approved 才真的发）、
+     * 跳过、撤回；已发送的不给回退入口。
+     */
+    function ApprovalModal({ id, item, t, busy, onClose, onDecide }) {
+      const [state, setState] = React.useState({ loading: true, data: null, error: null })
 
       React.useEffect(() => {
-        if (!open || detail.data || detail.loading) return undefined
         let alive = true
-        setDetail({ loading: true, data: null, error: null })
-        void callHost({ op: 'approval_detail', id: item.id })
+        setState({ loading: true, data: null, error: null })
+        void callHost({ op: 'approval_detail', id })
           .then((value) => {
-            if (alive) setDetail({ loading: false, data: value, error: null })
+            if (alive) setState({ loading: false, data: value, error: null })
           })
           .catch((error) => {
-            if (alive) setDetail({ loading: false, data: null, error: error?.message || String(error) })
+            if (alive) setState({ loading: false, data: null, error: error?.message || String(error) })
           })
         return () => {
           alive = false
         }
-      }, [open, item.id])
+      }, [id])
 
-      const data = detail.data ?? {}
-      const meta = [item.salary, item.city, item.recruiter ? `${item.recruiter}${item.recruiterTitle ? `/${item.recruiterTitle}` : ''}` : '']
-        .filter(Boolean)
-        .join(' · ')
-      const companyRows = [
+      const data = state.data ?? item ?? {}
+      const status = item?.status ?? data.status ?? 'pending'
+      const kv = [
+        ['job', data.jobTitle],
+        ['salary', data.salary],
+        ['city', data.city],
+        ['recruiter', [data.recruiter, data.recruiterTitle].filter(Boolean).join(' / ')],
+        ['ab', data.tier],
         ['industry', data.companyDetail?.industry],
-        ['scale', data.companyDetail?.scale],
         ['stage', data.companyDetail?.stage],
-        ['city', data.companyDetail?.city],
+        ['scale', data.companyDetail?.scale],
         ['first', data.companyDetail?.contactedBefore],
         ['channel', data.companyDetail?.channel],
-        ['ab', data.companyDetail?.tag],
         ['note', data.companyDetail?.note],
       ].filter(([, value]) => value)
       const msgs = data.msgs ?? []
-      const actions = []
-      if (item.status === 'pending') {
-        actions.push(
-          h(
-            UI.Button,
-            { size: 'sm', disabled: busy, onClick: () => onDecide(item, 'approved') },
-            t('approvalApprove'),
-          ),
-          h(
-            UI.Button,
-            { variant: 'outline', size: 'sm', disabled: busy, onClick: () => onDecide(item, 'skipped') },
-            t('approvalSkip'),
-          ),
+
+      const acts = []
+      if (status === 'pending') {
+        acts.push(
+          h(UI.Button, { disabled: busy, onClick: () => onDecide(item, 'approved') }, t('approvalApprove')),
         )
-      } else if (item.status === 'approved' || item.status === 'failed' || item.status === 'skipped') {
-        actions.push(
-          h(
-            UI.Button,
-            { variant: 'outline', size: 'sm', disabled: busy, onClick: () => onDecide(item, 'pending') },
-            t('approvalRevoke'),
-          ),
+        acts.push(
+          h(UI.Button, { variant: 'outline', disabled: busy, onClick: () => onDecide(item, 'skipped') }, t('approvalSkip')),
+        )
+      } else if (item && status !== 'sent') {
+        acts.push(
+          h(UI.Button, { variant: 'outline', disabled: busy, onClick: () => onDecide(item, 'pending') }, t('approvalRevoke')),
         )
       }
+      acts.push(h(UI.Button, { variant: 'ghost', onClick: onClose }, t('close')))
 
       return h(
-        'div',
-        { className: 'boss-ap-card', 'data-status': item.status },
-        h(
-          'div',
-          { className: 'boss-ap-head' },
-          h(
-            'div',
-            { className: 'boss-ap-title' },
-            h('span', { className: 'boss-co', title: item.company }, item.company),
-            h('span', { className: 'boss-ap-job' }, item.jobTitle || '—'),
-            item.tier ? h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier) : null,
-            h(UI.Tag, { tone: APPROVAL_TONE[item.status] ?? 'outline' }, t(APPROVAL_LABEL[item.status] ?? 'approvalStatusPending')),
-          ),
-          meta ? h('div', { className: 'boss-sub' }, meta) : null,
-        ),
-        item.evidence ? h('div', { className: 'boss-ap-line' }, h('b', null, `${t('approvalEvidence')}：`), item.evidence) : null,
-        item.gap ? h('div', { className: 'boss-ap-line boss-ap-gap' }, h('b', null, `${t('approvalGap')}：`), item.gap) : null,
-        h('div', { className: 'boss-ap-draft', title: item.draft }, item.draft || '—'),
-        item.sendResult && item.sendResult.status
-          ? h('div', { className: 'boss-ap-line boss-ap-result' }, `${item.sendResult.status} · ${item.sendResult.at || ''} ${item.sendResult.detail || ''}`)
+        UI.Modal,
+        {
+          open: true,
+          size: 'lg',
+          title: `${data.company || ''} · ${data.jobTitle || ''}`,
+          onClose,
+          footer: h('div', { className: 'boss-ap-acts' }, acts),
+        },
+        state.loading ? h(UI.EmptyState, null, t('loading')) : null,
+        state.error
+          ? h('div', { className: 'boss-error' }, t('detailFailed', { message: state.error }))
           : null,
-        h(
-          'div',
-          { className: 'boss-ap-acts' },
-          h(
-            UI.Button,
-            { variant: 'ghost', size: 'sm', onClick: () => setOpen((prev) => !prev) },
-            open ? `▾ ${t('approvalJd')}` : `▸ ${t('approvalJd')} / ${t('approvalCompany')} / ${t('approvalChat')}`,
-          ),
-          h('span', { className: 'boss-ap-spacer' }),
-          actions,
-        ),
-        open
+        !state.loading && !state.error
           ? h(
-              'div',
-              { className: 'boss-ap-detail' },
-              detail.loading ? h(UI.EmptyState, null, t('loading')) : null,
-              detail.error ? h('div', { className: 'boss-error' }, t('detailFailed', { message: detail.error })) : null,
-              !detail.loading && !detail.error
+              React.Fragment,
+              null,
+              h(
+                'div',
+                { className: 'boss-aq-badge' },
+                h(UI.Tag, { tone: APPROVAL_TONE[status] ?? 'outline' }, t(APPROVAL_LABEL[status] ?? 'approvalStatusPending')),
+                data.sendResult && data.sendResult.status
+                  ? h(
+                      'span',
+                      { className: 'boss-sub' },
+                      `${data.sendResult.status} · ${data.sendResult.at || ''} ${data.sendResult.detail || ''}`,
+                    )
+                  : null,
+              ),
+              kv.length
                 ? h(
-                    React.Fragment,
+                    'div',
                     null,
-                    h(
-                      'div',
-                      { className: 'boss-ap-sec' },
-                      h(UI.SectionTitle, null, t('approvalCompany')),
-                      companyRows.length
-                        ? companyRows.map(([key, value]) =>
-                            h(
-                              'div',
-                              { key, className: 'boss-kv' },
-                              h('span', { className: 'boss-kv-key' }, t(key)),
-                              h('span', { className: 'boss-kv-val' }, String(value)),
-                            ),
-                          )
-                        : h('div', { className: 'boss-sub' }, '—'),
+                    kv.map(([key, value]) =>
+                      h(
+                        'div',
+                        { key, className: 'boss-kv' },
+                        h('span', { className: 'boss-kv-key' }, t(key)),
+                        h('span', { className: 'boss-kv-val' }, String(value)),
+                      ),
                     ),
-                    h(
-                      'div',
-                      { className: 'boss-ap-sec' },
-                      h(UI.SectionTitle, null, t('approvalJd')),
-                      data.jdText
-                        ? h('pre', { className: 'boss-ap-jd' }, data.jdText)
-                        : h('div', { className: 'boss-sub' }, '—'),
-                      data.jdUrl
-                        ? h(
-                            'a',
-                            { className: 'boss-ap-link', href: data.jdUrl, target: '_blank', rel: 'noreferrer' },
-                            t('approvalOpenJd'),
-                          )
-                        : null,
+                  )
+                : null,
+              data.evidence
+                ? h('div', { className: 'boss-ap-line' }, h('b', null, `${t('approvalEvidence')}：`), data.evidence)
+                : null,
+              data.gap
+                ? h('div', { className: 'boss-ap-line boss-ap-gap' }, h('b', null, `${t('approvalGap')}：`), data.gap)
+                : null,
+              data.draft
+                ? h(
+                    'div',
+                    { className: 'boss-ap-draft-block' },
+                    h(UI.SectionTitle, null, t('approvalDraft')),
+                    h('div', { className: 'boss-ap-draft' }, data.draft),
+                  )
+                : null,
+              h(UI.SectionTitle, { style: { marginTop: 14 } }, t('approvalChat')),
+              msgs.length
+                ? h(
+                    'div',
+                    { className: 'boss-chat' },
+                    msgs.map((entry, index) =>
+                      h(
+                        'div',
+                        { key: index, className: 'boss-cm', 'data-mine': entry.mine ? 'true' : 'false' },
+                        h('span', { className: 'boss-cm-tag' }, entry.mine ? t('fromMe') : t('fromThem')),
+                        entry.text,
+                      ),
                     ),
-                    h(
-                      'div',
-                      { className: 'boss-ap-sec' },
-                      h(UI.SectionTitle, null, t('approvalChat')),
-                      msgs.length
-                        ? h(
-                            'div',
-                            { className: 'boss-chat' },
-                            msgs.map((entry, index) =>
-                              h(
-                                'div',
-                                { key: index, className: 'boss-cm', 'data-mine': entry.mine ? 'true' : 'false' },
-                                h('span', { className: 'boss-cm-tag' }, entry.mine ? t('fromMe') : t('fromThem')),
-                                entry.text,
-                              ),
-                            ),
-                          )
-                        : h('div', { className: 'boss-sub' }, t('approvalChatEmpty')),
-                    ),
+                  )
+                : h('div', { className: 'boss-cm', 'data-mine': 'false' }, t('approvalChatEmpty')),
+              h(UI.SectionTitle, { style: { marginTop: 14 } }, t('approvalJd')),
+              data.jdText ? h('pre', { className: 'boss-ap-jd' }, data.jdText) : h('div', { className: 'boss-sub' }, '—'),
+              data.jdUrl
+                ? h(
+                    'a',
+                    { className: 'boss-ap-link', href: data.jdUrl, target: '_blank', rel: 'noreferrer' },
+                    t('approvalOpenJd'),
                   )
                 : null,
             )
           : null,
-      )
-    }
-
-    function ApprovalTab({ approvals, t, onDecide, busyId, notice }) {
-      const items = approvals?.items ?? []
-      const stats = approvals?.stats ?? {}
-      // 旧宿主（index.js 未重载）的快照里没有 approvals 字段：显式说清楚，别让人误以为是空池。
-      if (!approvals) {
-        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalStale')))
-      }
-      if (!items.length) {
-        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalEmpty')))
-      }
-      return h(
-        'div',
-        { className: 'boss-ap' },
-        h(
-          'div',
-          { className: 'boss-ap-summary' },
-          t('approvalSummary', {
-            pending: stats.pending ?? 0,
-            approved: stats.approved ?? 0,
-            sent: stats.sent ?? 0,
-            skipped: stats.skipped ?? 0,
-          }),
-          notice ? h('span', { className: 'boss-ap-notice' }, notice) : null,
-        ),
-        items.map((item) =>
-          h(ApprovalCard, { key: item.id, item, t, onDecide, busy: busyId === item.id }),
-        ),
       )
     }
 
@@ -1492,7 +1505,6 @@ function createUiKit(React) {
 
     function TabBar({ tab, setTab, t }) {
       const tabs = [
-        { value: 'approval', label: t('tabApproval') },
         { value: 'overview', label: t('tabOverview') },
         { value: 'interviews', label: t('tabInterview') },
         { value: 'threads', label: t('tabThreads') },
@@ -1510,18 +1522,17 @@ function createUiKit(React) {
       const t = props.t
       // props.initialTab 只给测试用：面板分 tab 渲染，单次渲染只能覆盖一个 tab，
       // 测试需要跑三遍才能断言三个区块都在（否则会误报 RENDER INCOMPLETE）。
-      // 有待审批的候选时默认停在审批 Tab（2026-10-28：用户要的是「点一下就发」，
-      // 打开面板先看到待办，而不是概览）。
-      const [tab, setTab] = React.useState(
-        () => props.initialTab ?? ((snapshot.data?.approvals?.stats?.pending ?? 0) > 0 ? 'approval' : 'overview'),
-      )
+      // 默认永远落在概览（2026-10-28 返工：审批不单开 Tab，待审批候选就嵌在概览里，
+      // 免得「等着回复的」那些区块被一个空 Tab 挡住）。
+      const [tab, setTab] = React.useState(() => props.initialTab ?? 'overview')
       const [query, setQuery] = React.useState('')
       const [picked, setPicked] = React.useState([])
       const [openCompany, setOpenCompany] = React.useState(null)
       const [pendingHidden, setPendingHidden] = React.useState(() => new Set())
       const [notice, setNotice] = React.useState('')
       const [approvalNotice, setApprovalNotice] = React.useState('')
-      const [approvalBusyId, setApprovalBusyId] = React.useState('')
+      const [approvalOpen, setApprovalOpen] = React.useState(null)
+      const [approvalBusy, setApprovalBusy] = React.useState(false)
 
       const data = snapshot.data
       const loading = snapshot.loading && !data
@@ -1582,7 +1593,7 @@ function createUiKit(React) {
 
       // 审批回写：只改本地状态机，不触发发送 —— 发送由 agent 侧 runner 轮询 approved 完成。
       const decideApproval = async (item, status) => {
-        setApprovalBusyId(item.id)
+        setApprovalBusy(true)
         try {
           await callHost({ op: 'approval_decide', id: item.id, status })
           setApprovalNotice(
@@ -1592,11 +1603,12 @@ function createUiKit(React) {
                 ? t('approvalSkipped')
                 : t('approvalRevoked'),
           )
+          setApprovalOpen(null)
           await props.refresh?.()
         } catch (error) {
           setApprovalNotice(t('approvalFailed', { message: error?.message || String(error) }))
         } finally {
-          setApprovalBusyId('')
+          setApprovalBusy(false)
         }
       }
 
@@ -1674,27 +1686,6 @@ function createUiKit(React) {
 
           !loading && data ? h(TabBar, { tab, setTab, t }) : null,
 
-          // —— 审批：你点头，agent 才发 ——
-          !loading && data && tab === 'approval'
-            ? h(
-                'div',
-                null,
-                h(
-                  'div',
-                  { className: 'boss-section' },
-                  h(UI.SectionTitle, null, t('approvalTitle')),
-                  h('span', { className: 'boss-section-count' }, t('approvalSub')),
-                ),
-                h(ApprovalTab, {
-                  approvals: data.approvals,
-                  t,
-                  onDecide: decideApproval,
-                  busyId: approvalBusyId,
-                  notice: approvalNotice,
-                }),
-              )
-            : null,
-
           // —— 概览：仪表盘 ——
           !loading && data && tab === 'overview'
             ? h(
@@ -1766,6 +1757,24 @@ function createUiKit(React) {
                     }),
                   ),
                 ),
+                data.approvals
+                  ? h(
+                      'div',
+                      null,
+                      h(
+                        'div',
+                        { className: 'boss-section' },
+                        h(UI.SectionTitle, null, t('approvalTitle')),
+                        h('span', { className: 'boss-section-count' }, t('approvalSub')),
+                      ),
+                      h(ApprovalQueue, {
+                        approvals: data.approvals,
+                        t,
+                        onOpen: setApprovalOpen,
+                        notice: approvalNotice,
+                      }),
+                    )
+                  : null,
                 pending.filter((item) => !pendingHidden.has(item.id)).length
                   ? h(
                       'div',
@@ -1933,6 +1942,18 @@ function createUiKit(React) {
 
         openCompany
           ? h(DetailModal, { company: openCompany, onClose: () => setOpenCompany(null), t })
+          : null,
+
+        // 审批弹窗：队列行点开才有，详情（JD/公司/完整聊天）在这时才拉。
+        approvalOpen
+          ? h(ApprovalModal, {
+              id: approvalOpen,
+              item: (data?.approvals?.items ?? []).find((item) => item.id === approvalOpen),
+              t,
+              busy: approvalBusy,
+              onClose: () => setApprovalOpen(null),
+              onDecide: decideApproval,
+            })
           : null,
       )
     }

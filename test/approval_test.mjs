@@ -1,8 +1,12 @@
-// 审批 Tab 渲染测试（2026-10-28 用户要求在面板上加审批流）。
-// 断言：默认落在「审批」Tab → 12 张候选卡（含公司/岗位/草稿）→ pending 卡有
-// 「通过并发送/跳过」→ 点通过会真的 POST approval_decide。
-// 详情（JD/公司/聊天）需要 async 拉取，harness 里 useEffect 是空桩，
-// 所以详情内容由 index.js 的 buildApprovalDetail 单测覆盖，这里只验入口。
+// 审批队列 + 审批弹窗渲染测试（2026-10-28 返工版）。
+// 用户口径：不要单独 Tab、不要把详情摊成展开卡片 —— 一行一条候选，点开用既有弹窗。
+// 断言：
+//   1) TabBar 只剩三个 Tab（审批不再是 Tab）
+//   2) 概览里出现待审批队列，行数 = 未终结条目数
+//   3) 行里带公司 / 岗位 / 薪资 / 草稿
+//   4) 点行 → 弹窗打开，底部出现「通过并发送 / 跳过」
+//   5) 点通过 → 真的 POST approval_decide(status=approved)
+//   6) 已通过的条目在行上显示「已通过 · 待发送」，弹窗里只剩「撤回」
 import fs from 'node:fs'
 
 let factory = null
@@ -60,12 +64,39 @@ plugin.apply({
 })
 const panel = registrations.find((r) => r.meta.name === 'main')
 
-const { buildSnapshot } = await import('../index.js')
-const snap = await buildSnapshot()
-const store = { getSnapshot: () => ({ loading: false, data: snap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
+const { buildSnapshot, buildApprovalDetail } = await import('../index.js')
+const liveSnap = await buildSnapshot()
+const snap = {
+  ...liveSnap,
+  approvals: {
+    stats: { total: 3, pending: 2, approved: 1, sent: 0, skipped: 0, failed: 0 },
+    items: [
+      {
+        id: 'demo-001', company: '示例科技', jobTitle: '战斗策划', salary: '20-30K', city: '上海',
+        recruiter: '联系人A', recruiterTitle: 'HR', tier: 'A', status: 'pending',
+        evidence: 'JD 写明行为树与怪物 AI', gap: '需补 MMO 经验',
+        draft: '您好，看到 JD 里写行为树和怪物 AI，我在 3A 项目里主做战斗 AI…', draftHash: 'h1',
+      },
+      {
+        id: 'demo-002', company: '样本互娱', jobTitle: '技术策划', salary: '18-25K', city: '杭州',
+        recruiter: '联系人B', recruiterTitle: '制作人', tier: 'B', status: 'pending',
+        evidence: '工具链与蓝图调试', gap: '岗位偏工具', draft: '您好，我在项目里做过蓝图调试工具…', draftHash: 'h2',
+      },
+      {
+        id: 'demo-003', company: '样例网络', jobTitle: '战斗数值', salary: '15-20K', city: '长沙',
+        recruiter: '联系人C', recruiterTitle: 'HR', tier: 'B', status: 'approved',
+        evidence: '自走棋数值', gap: '无 AI 主责', draft: '您好，做过战斗数值与平衡…', draftHash: 'h3',
+      },
+    ],
+  },
+}
 
-const build = () => { seq = 0; return panel.Comp({ useSnapshot: (f) => f(store.getSnapshot()), t: (k) => k, lang: 'zh', refresh: () => {} }) }
-const render = () => { stateBag = {}; return build() }
+let store = { getSnapshot: () => ({ loading: false, data: snap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
+const face = () => ({ useSnapshot: (f) => f(store.getSnapshot()), t: (k, v) => (v ? `${k}(${JSON.stringify(v)})` : k), lang: 'zh', refresh: () => {} })
+
+// 同一次渲染内 stateBag 不重置，才能模拟「点一下 → 重渲染」。
+const renderFresh = () => { stateBag = {}; seq = 0; return panel.Comp(face()) }
+const rerender = () => { seq = 0; return panel.Comp(face()) }
 
 function walk(node, out) {
   if (node == null || typeof node === 'boolean') return
@@ -101,57 +132,75 @@ function findAll(node, pred, acc = []) {
 let ok = true
 const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if (!pass) ok = false }
 const textOf = (n) => (typeof n.children?.[0] === 'string' ? n.children[0] : n.children?.map?.((c) => c?.children?.[0]).join(''))
+const collect = (tree) => { const o = { texts: [], classes: new Set() }; walk(tree, o); return o }
 
-// —— 默认落在审批 Tab ——
-const tree = render()
-const out = { texts: [], classes: new Set() }
-walk(tree, out)
+const items = snap.approvals.items
+const live = items.filter((i) => i.status !== 'sent' && i.status !== 'skipped')
+
+// —— 1) 三个 Tab，审批不再占位 ——
+const tree = renderFresh()
+const tabsNode = findAll(tree, (n) => Array.isArray(n.props?.tabs))[0]
+const tabLabels = (tabsNode?.props?.tabs ?? []).map((x) => x.label)
+check('Tab 只有三个（审批不再单开）', tabLabels.length === 3 && !tabLabels.some((l) => l.includes('tabApproval')))
+check('默认落在概览', tabLabels[0] === 'tabOverview')
+
+// —— 2/3) 概览里有待审批队列 ——
+const out = collect(tree)
+check('概览渲染待审批区块', out.texts.join(' | ').includes('approvalTitle'))
+const rows = findAll(tree, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-row'))
+check(`队列行数 = ${live.length}`, rows.length === live.length && rows.length > 0)
+const firstCompany = live[0]?.company ?? ''
+const lastCompany = items[Math.min(3, items.length - 1)]?.company ?? ''
 const joined = out.texts.join(' | ')
-check('默认 Tab 是审批', joined.includes('tabApproval') && joined.includes('approvalTitle'))
-// 统计卡在概览 Tab 上，单独渲染一次断言。
-{
-  seq = 0
-  stateBag = {}
-  const ov = panel.Comp({ initialTab: 'overview', useSnapshot: (f) => f(store.getSnapshot()), t: (k) => k, lang: 'zh', refresh: () => {} })
-  const o = { texts: [], classes: new Set() }
-  walk(ov, o)
-  check('概览统计卡有「待审批」', o.texts.join(' | ').includes('statApproval'))
-}
-check('渲染候选卡', out.classes.has('boss-ap-card'))
+check('行里带公司名', !!firstCompany && joined.includes(firstCompany) && joined.includes(lastCompany))
+check('行里带岗位/薪资', joined.includes(live[0]?.jobTitle ?? '@@') && joined.includes(live[0]?.salary ?? '@@'))
+check('概览仍保留「等着回复」区块', out.texts.join(' | ').includes('actionTitle'))
 
-const cards = findAll(tree, (n) => n.props?.className === 'boss-ap-card' || (typeof n.props?.className === 'string' && n.props.className.includes('boss-ap-card')))
-check(`卡片数量 = ${snap.approvals.stats.total}`, cards.length === snap.approvals.stats.total)
-const firstCompany = snap.approvals.items[0]?.company ?? ''
-const lastCompany = snap.approvals.items[Math.min(3, snap.approvals.items.length - 1)]?.company ?? ''
-check('卡片含公司名', !!firstCompany && joined.includes(firstCompany) && joined.includes(lastCompany))
-check('卡片含草稿正文', joined.includes('Agent 平台') || joined.includes('敌人 AI'))
-
-const approveBtn = findAll(tree, (n) => n.props?.onClick && textOf(n) === 'approvalApprove')
-const skipBtn = findAll(tree, (n) => n.props?.onClick && textOf(n) === 'approvalSkip')
-check('pending 卡有「通过并发送」', approveBtn.length === snap.approvals.stats.pending)
-check('pending 卡有「跳过」', skipBtn.length === snap.approvals.stats.pending)
-
-// —— 点第一张卡的「通过并发送」 ——
+// —— 4) 点行开弹窗 ——
 calls.length = 0
+rows[0].props.onClick()
+const tree2 = rerender()
+const out2 = collect(tree2)
+const modalActs = findAll(tree2, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-ap-acts'))
+check('点行后弹窗底部动作区出现', modalActs.length === 1)
+const approveBtn = findAll(tree2, (n) => n.props?.onClick && textOf(n) === 'approvalApprove')
+const skipBtn = findAll(tree2, (n) => n.props?.onClick && textOf(n) === 'approvalSkip')
+check('弹窗里有「通过并发送 / 跳过」', approveBtn.length === 1 && skipBtn.length === 1)
+check('弹窗标题带公司名', out2.texts.some((x) => typeof x === 'string' && x.includes(firstCompany)))
+
+// —— 5) 点通过 → POST ——
 approveBtn[0].props.onClick()
 await new Promise((r) => setTimeout(r, 20))
 const decide = calls.find((c) => c.op === 'approval_decide')
 check('点击后 POST approval_decide', !!decide && decide.status === 'approved')
-check('带上条目 id', typeof decide?.id === 'string' && decide.id.startsWith('20261028-'))
+check('带上条目 id', decide?.id === 'demo-001')
 
-// —— 已通过的卡改成「撤回」按钮 ——
+// —— 6) 已通过的条目：行上有状态、弹窗里只剩「撤回」 ——
 {
   const approvedSnap = JSON.parse(JSON.stringify(snap))
   approvedSnap.approvals.items[0].status = 'approved'
   approvedSnap.approvals.stats.pending = snap.approvals.stats.pending - 1
   approvedSnap.approvals.stats.approved = snap.approvals.stats.approved + 1
-  const store2 = { getSnapshot: () => ({ loading: false, data: approvedSnap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
-  stateBag = {}
-  seq = 0
-  const t2 = panel.Comp({ initialTab: 'approval', useSnapshot: (f) => f(store2.getSnapshot()), t: (k) => k, lang: 'zh', refresh: () => {} })
-  const revoke = findAll(t2, (n) => n.props?.onClick && textOf(n) === 'approvalRevoke')
-  const approveNow = findAll(t2, (n) => n.props?.onClick && textOf(n) === 'approvalApprove')
-  check('已通过的卡只显「撤回」', revoke.length === 1 && approveNow.length === snap.approvals.stats.pending - 1)
+  store = { getSnapshot: () => ({ loading: false, data: approvedSnap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
+  const t2 = renderFresh()
+  const o2 = collect(t2)
+  check('已通过的行显示状态', o2.texts.join(' | ').includes('approvalStatusApproved'))
+  const rows2 = findAll(t2, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-row'))
+  rows2[0].props.onClick()
+  const t3 = rerender()
+  const revoke = findAll(t3, (n) => n.props?.onClick && textOf(n) === 'approvalRevoke')
+  const approveNow = findAll(t3, (n) => n.props?.onClick && textOf(n) === 'approvalApprove')
+  check('已通过的弹窗只剩「撤回」', revoke.length === 1 && approveNow.length === 0)
+}
+
+// —— 7) 宿主侧：真实数据也能给 JD / 公司 / 聊天（内容随日期变，只验结构）——
+{
+  const live = liveSnap.approvals?.items ?? []
+  check('真实快照带 approvals', Array.isArray(live) && live.length > 0)
+  const detail = await buildApprovalDetail(live[0].id)
+  check('approval_detail 返回 JD 正文字段', typeof detail.jdText === 'string' && detail.jdText.length > 50)
+  check('approval_detail 返回公司详情', !!detail.companyDetail)
+  check('approval_detail 带完整聊天字段', Array.isArray(detail.msgs) && detail.msgs.length <= 400)
 }
 
 console.log(ok ? 'APPROVAL OK' : 'APPROVAL INCOMPLETE')
