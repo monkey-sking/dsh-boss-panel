@@ -509,6 +509,7 @@ function createUiKit(React) {
       approvalStaleDraft: '这条草稿在你查看后改过 —— 重新打开看一眼再发',
       approvalPeekFirst: '先打开这一条看一眼 JD 和草稿，再点发送',
       approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
+      approvalsCorrupt: '审批文件一时读不出来（可能后台正在写），下面的待发列表不是真实状态 —— 稍等会自动恢复',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
       approvalStatusSent: '已发送',
@@ -675,6 +676,7 @@ function createUiKit(React) {
       approvalStaleDraft: 'This draft changed after you opened it — reopen and confirm',
       approvalPeekFirst: 'Open this item first, then hit send',
       approvalGone: 'This item is no longer in the queue — refreshed',
+      approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
       approvalStatusPending: 'Waiting',
       approvalStatusApproved: 'Approved · queued',
       approvalStatusSent: 'Sent',
@@ -971,6 +973,7 @@ function createUiKit(React) {
       button.boss-kpi-item:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
       .boss-kpi-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
       .boss-kpi-bad b { color: var(--dsw-alias-label-danger); }
+      .boss-degraded { margin: 8px 0 2px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); font-size: 13px; color: var(--dsw-alias-label-secondary); }
       .boss-today-interview { margin: 10px 0 2px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); font-size: 13px; }
       .boss-section-head { display: flex; align-items: baseline; gap: 8px; }
       .boss-fail-rows { margin-top: 10px; border: 1px solid var(--dsw-alias-label-danger); border-radius: 8px; padding: 8px 11px; }
@@ -2180,6 +2183,13 @@ function createUiKit(React) {
             ? h(
                 'div',
                 { className: 'boss-today', role: 'tabpanel', 'aria-label': t('tabToday') },
+                data?.dataQuality?.approvalsCorrupt
+                  ? h(
+                      'div',
+                      { className: 'boss-degraded', role: 'status' },
+                      t('approvalsCorrupt'),
+                    )
+                  : null,
                 h(
                   'div',
                   { className: 'boss-kpi' },

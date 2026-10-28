@@ -31,6 +31,17 @@ try {
   await rm(dirty, { recursive: true, force: true })
 }
 
+// 回归：审批文件损坏时不能假装「没有待发」——要带 dataQuality.approvalsCorrupt 让界面说实话。
+const broken = await mkdtemp(path.join(tmpdir(), 'boss-snap-broken-'))
+try {
+  await writeFile(path.join(broken, 'boss_approvals.json'), '{bad json')
+  const s = await buildSnapshot({ dataDir: broken })
+  assert.equal(s.dataQuality.approvalsCorrupt, true, 'corrupt approvals file must be flagged')
+  console.log('SNAP OK (corrupt approvals flagged)')
+} finally {
+  await rm(broken, { recursive: true, force: true })
+}
+
 // 审批链发送只写 boss_approvals.json，且 sentAt 是 UTC ISO —— 简报的「今天已发」
 // 必须按本地日算，不能拿 UTC 日期切片（00:00–08:00 发出的会算到前一天）。
 const clock = await mkdtemp(path.join(tmpdir(), 'boss-snap-clock-'))

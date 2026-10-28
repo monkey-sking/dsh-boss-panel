@@ -1149,9 +1149,19 @@ export async function buildSnapshot(options = {}) {
     ab,
   }
 
+  // 文件读坏了（比如面板正好在写）要显式告诉界面，别把「读不出来」渲染成「没有待发」。
+  let approvalsCorrupt = false
+  try {
+    const raw = await fs.readFile(files.approvals, 'utf8')
+    JSON.parse(raw)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') approvalsCorrupt = true
+  }
+
   return {
     version,
     updatedAt: toIso(merged.ts),
+    dataQuality: { approvalsCorrupt },
     dataDir,
     today: todayKey,
     counts,
