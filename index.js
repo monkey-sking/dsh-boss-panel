@@ -1334,12 +1334,14 @@ function buildApprovals(doc, threadRows = [], contactRows = []) {
   // 30 天内投过的公司：招聘方评审里最贵的一条教训是「同一家重发首触不加曝光」，
   // 但面板此前完全看不出这家上周刚投过。
   const lastContact = new Map()
-  const todayMs = Date.parse(new Date().toISOString().slice(0, 10))
+  // 用本地日算差：contacted.json 的 date 是本地日期，若按 UTC 解析，
+  // 凌晨 00:00–08:00（东八区）会整体差一天，「7 天前投过」会误报成 6 天。
+  const todayMs = new Date(`${localDateKey(new Date())}T00:00:00`).getTime()
   for (const row of contactRows) {
     const company = String(row?.company || '').trim()
     const day = String(row?.date || '').slice(0, 10)
     if (!company || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue
-    const days = Math.floor((todayMs - Date.parse(day)) / 86400000)
+    const days = Math.round((todayMs - new Date(`${day}T00:00:00`).getTime()) / 86400000)
     if (!Number.isFinite(days) || days < 0) continue
     const prev = lastContact.get(company)
     if (prev == null || days < prev) lastContact.set(company, days)

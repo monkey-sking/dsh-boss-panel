@@ -42,6 +42,38 @@ try {
   await rm(broken, { recursive: true, force: true })
 }
 
+// 回归：「N 天前投过」必须按本地日算。contacted.json 的 date 是本地日期，
+// 早年用 toISOString().slice(0,10) 当今天，东八区 00:00–08:00 会整体差一天（2026-10-29 实测）。
+const contactAge = await mkdtemp(path.join(tmpdir(), 'boss-snap-contact-'))
+try {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const today = key(now)
+  const weekAgo = key(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7))
+  await writeFile(path.join(contactAge, 'boss_approvals.json'), JSON.stringify({
+    items: [
+      { id: 'c1', company: '示例甲', jobTitle: '战斗策划', draft: 'x', draftHash: 'h', status: 'pending' },
+      { id: 'c2', company: '示例乙', jobTitle: '战斗策划', draft: 'x', draftHash: 'h', status: 'pending' },
+      { id: 'c3', company: '示例丙', jobTitle: '战斗策划', draft: 'x', draftHash: 'h', status: 'pending' },
+    ],
+  }), 'utf-8')
+  await writeFile(path.join(contactAge, 'contacted.json'), JSON.stringify({
+    entries: [
+      { company: '示例甲', date: today },
+      { company: '示例乙', date: weekAgo },
+    ],
+  }), 'utf-8')
+  const s = await buildSnapshot({ dataDir: contactAge })
+  const by = Object.fromEntries(s.approvals.items.map((i) => [i.company, i.contactedDays]))
+  assert.equal(by['示例甲'], 0, '今天投过应为 0 天（UTC 日期会错成 1 天）')
+  assert.equal(by['示例乙'], 7, '7 天前投过应为 7 天')
+  assert.equal(by['示例丙'], null, '没投过的公司应为 null，不是 0')
+  console.log('SNAP OK (contact age uses local date)')
+} finally {
+  await rm(contactAge, { recursive: true, force: true })
+}
+
 // 审批链发送只写 boss_approvals.json，且 sentAt 是 UTC ISO —— 简报的「今天已发」
 // 必须按本地日算，不能拿 UTC 日期切片（00:00–08:00 发出的会算到前一天）。
 const clock = await mkdtemp(path.join(tmpdir(), 'boss-snap-clock-'))
