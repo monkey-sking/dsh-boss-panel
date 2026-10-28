@@ -828,6 +828,7 @@ function createUiKit(React) {
       .boss-tr:last-child { border-bottom: none; }
       .boss-tr[data-clickable="true"] { cursor: pointer; }
       .boss-tr[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
+      [data-clickable="true"]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; border-radius: 6px; }
       .boss-th { font-size: 11.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); font-weight: 500; }
       .boss-tr.threads { grid-template-columns: 82px minmax(120px, 1fr) minmax(120px, 1.1fr) minmax(160px, 1.9fr) 96px; }
       .boss-tr.iv { grid-template-columns: minmax(120px, 1.2fr) 84px 84px minmax(110px, 1fr) 70px minmax(90px, .9fr) minmax(110px, 1fr); }
@@ -953,6 +954,21 @@ function createUiKit(React) {
       .boss-upcoming-row[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
       .boss-upcoming-main { min-width: 0; }
     `
+
+    // 可点击行统一走这里：role/tabIndex/Enter+Space，别只给鼠标用户用。
+    const clickProps = (onActivate, label) => ({
+      'data-clickable': 'true',
+      role: 'button',
+      tabIndex: 0,
+      'aria-label': label,
+      onClick: onActivate,
+      onKeyDown: (event) => {
+        if (event && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault?.()
+          onActivate?.()
+        }
+      },
+    })
 
     const TAG_TONE = { warn: 'warning', error: 'danger', brand: 'info', success: 'success', idle: 'outline' }
     const DOT_STATE = { warn: 'warning', error: 'error', brand: 'info', success: 'done', idle: 'idle' }
@@ -1101,8 +1117,7 @@ function createUiKit(React) {
         'div',
         {
           className: 'boss-tr threads',
-          'data-clickable': 'true',
-          onClick: () => onOpen(item.company),
+          ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''}`),
         },
         h(
           'span',
@@ -1271,8 +1286,7 @@ function createUiKit(React) {
             {
               key: `${item.company}|${item.who}`,
               className: 'boss-action-row',
-              'data-clickable': 'true',
-              onClick: () => onOpen(item.company),
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''}`),
             },
             h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state),
             h(
@@ -1307,8 +1321,7 @@ function createUiKit(React) {
             {
               key: item.id,
               className: 'boss-action-row boss-pending-row',
-              'data-clickable': 'true',
-              onClick: () => onOpen(item.company),
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.job || ''}`),
             },
             h(
               UI.Tag,
@@ -1470,9 +1483,8 @@ function createUiKit(React) {
               {
                 key: item.id,
                 className: 'boss-aq-item',
-                'data-clickable': 'true',
                 'data-status': item.status,
-                onClick: () => onOpen(item.id),
+                ...clickProps(() => onOpen(item.id), `${item.company} ${item.jobTitle || ''}`),
               },
               h(
                 'div',
@@ -1522,7 +1534,11 @@ function createUiKit(React) {
           const key = `${item.company}|${item.who}`
           return h(
             'div',
-            { key, className: 'boss-wait-row', 'data-clickable': 'true', onClick: () => onOpen(item.company) },
+            {
+              key,
+              className: 'boss-wait-row',
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''}`),
+            },
             h(
               'div',
               { className: 'boss-wait-main' },
@@ -1579,8 +1595,8 @@ function createUiKit(React) {
           'div',
           {
             className: 'boss-sent-line',
-            'data-clickable': 'true',
-            onClick: () => setExpanded((v) => !v),
+            'aria-expanded': expanded ? 'true' : 'false',
+            ...clickProps(() => setExpanded((v) => !v), t('sentTitle')),
           },
           h('span', { className: 'boss-sent-title' }, t('sentTitle')),
           h('span', { className: 'boss-sent-meta' }, t('sentLine', { n: items.length, time: last })),
@@ -1618,8 +1634,7 @@ function createUiKit(React) {
               key: item.id,
               className: 'boss-aq-item',
               'data-status': item.status,
-              'data-clickable': 'true',
-              onClick: () => onOpen?.(item.id),
+              ...clickProps(() => onOpen?.(item.id), `${item.company} ${item.jobTitle || ''}`),
             },
             h(
               'div',
@@ -1827,8 +1842,7 @@ function createUiKit(React) {
             {
               key: `${item.company}|${index}`,
               className: 'boss-upcoming-row',
-              'data-clickable': 'true',
-              onClick: () => onOpen(item.company),
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.when || ''}`),
             },
             h('span', { className: 'boss-chipd', 'data-tone': chip.tone }, chip.text),
             h(
