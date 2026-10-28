@@ -173,5 +173,30 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   }
 }
 
+// —— 被闸门挡下的条目要在面板上说一声（不然用户以为点了没发）——
+{
+  const blockedSnap = {
+    ...snap,
+    dataQuality: {
+      ...(snap.dataQuality || {}),
+      lastBlockedAt: new Date().toISOString(),
+      lastBlockedCount: 2,
+      lastDispatchAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+  }
+  const blockedStore = {
+    getSnapshot: () => ({ loading: false, data: blockedSnap, error: null }),
+    subscribe: () => () => {},
+    refresh: async () => {},
+  }
+  const prev = store.getSnapshot
+  store.getSnapshot = blockedStore.getSnapshot
+  const tree = render()
+  const texts = [], classes = new Set()
+  walk(tree, texts, classes)
+  check('拦截提示出现在面板顶部', texts.join(' | ').includes('blockedNotice'))
+  store.getSnapshot = prev
+}
+
 console.log(ok ? 'RENDER OK' : 'RENDER INCOMPLETE')
 process.exit(ok ? 0 : 1)

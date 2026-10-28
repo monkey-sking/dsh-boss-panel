@@ -510,6 +510,7 @@ function createUiKit(React) {
       approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
       approvalsCorrupt: '待发清单暂时读不出来（可能正在写入）—— 下面的列表不是最新状态，稍等会自动恢复',
       runnerStale: '后台发送器已经 {n} 分钟没动静了 —— 面板上点「发出」不会真的发出去，检查 dsh 的 boss-approval-send 任务',
+      blockedNotice: '有 {n} 条没发出去：授权过期或草稿在批准后改过 —— 在下面重新点一次「发送」',
       hardGateChip: 'JD 硬门槛',
       approvalStuck: '有 {n} 条已排上、超过 20 分钟没发出 —— 后台发送任务可能停了（boss-approval-send）',
       chatOlder: '上面还有 {n} 条更早的聊天，这里只显示最近 30 条',
@@ -681,6 +682,7 @@ function createUiKit(React) {
       approvalGone: 'This item is no longer in the queue — refreshed',
       approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
       runnerStale: 'The background sender has been idle for {n} min — approving here will not send; check the boss-approval-send task',
+      blockedNotice: '{n} item(s) were not sent: the approval expired or the draft changed after approving — click 发送 again below',
       hardGateChip: 'JD hard gate',
       approvalStuck: '{n} approved over 20 minutes ago but not sent — the background sender may be down',
       chatOlder: '{n} earlier messages are hidden — showing the latest 30',
@@ -2212,12 +2214,20 @@ function createUiKit(React) {
                   (it) => it.status === 'pending' || it.status === 'approved',
                 ).length
                 const stale = dq.runnerStaleMin != null && dq.runnerStaleMin > 90 && openN > 0
-                if (!dq.approvalsCorrupt && !stale) return null
+                // 被闸门挡下的：只有「最后一次拦截晚于最后一次成功派发」才提示，
+                // 否则用户修好之后横幅会一直挂着吓人。
+                const blockedTs = dq.lastBlockedAt ? Date.parse(dq.lastBlockedAt) : 0
+                const sentTs = dq.lastDispatchAt ? Date.parse(dq.lastDispatchAt) : 0
+                const freshBlocked =
+                  blockedTs > 0 && blockedTs > sentTs && Date.now() - blockedTs < 24 * 3600 * 1000
+                const blockedN = freshBlocked ? dq.lastBlockedCount || 0 : 0
+                if (!dq.approvalsCorrupt && !stale && !blockedN) return null
                 return h(
                   'div',
                   { className: 'boss-degraded', role: 'status' },
                   dq.approvalsCorrupt ? h('div', null, t('approvalsCorrupt')) : null,
                   stale ? h('div', null, t('runnerStale', { n: dq.runnerStaleMin })) : null,
+                  blockedN ? h('div', null, t('blockedNotice', { n: blockedN })) : null,
                 )
               })()
             : null,

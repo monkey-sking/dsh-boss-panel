@@ -1202,10 +1202,45 @@ export async function buildSnapshot(options = {}) {
     ? Math.round((Date.now() - Date.parse(lastRunnerAt)) / 60000)
     : null
 
+  // 被闸门挡下的条目只写审计 + 推一次 IM，面板上看不见 —— 用户会以为「点了怎么没发」。
+  // 取审计尾部最后一条 blocked，与最后一次 dispatch 比时间：之后又发成功了就不再提示。
+  let lastBlockedAt = null
+  let lastBlockedCount = 0
+  let lastDispatchAt = null
+  try {
+    const auditFile = path.join(stateDir, 'boss_approval_audit.jsonl')
+    const raw = await fs.readFile(auditFile, 'utf8')
+    const lines = raw.trim().split('\n').slice(-200)
+    for (const line of lines) {
+      let row = null
+      try {
+        row = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (!row || !row.ts) continue
+      if (row.event === 'blocked') {
+        lastBlockedAt = row.ts
+        if (Array.isArray(row.items)) lastBlockedCount = row.items.length
+      } else if (row.event === 'dispatch' || row.event === 'settled') {
+        lastDispatchAt = row.ts
+      }
+    }
+  } catch {
+    /* 没有审计文件就是没跑过，不算异常 */
+  }
+
   return {
     version,
     updatedAt: toIso(merged.ts),
-    dataQuality: { approvalsCorrupt, lastRunnerAt, runnerStaleMin },
+    dataQuality: {
+      approvalsCorrupt,
+      lastRunnerAt,
+      runnerStaleMin,
+      lastBlockedAt,
+      lastBlockedCount,
+      lastDispatchAt,
+    },
     dataDir,
     today: todayKey,
     counts,
