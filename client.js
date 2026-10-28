@@ -358,7 +358,7 @@ function createUiKit(React) {
     const zh = {
       panel: '招聘',
       title: 'BOSS 直聘 · 求职面板',
-      intro: '会话线程、待回复与面试日程。数据读求职工作流的本地快照，只读不改。',
+      intro: '今天要办的事：谁在等我回、今天该发谁、发出去的有没有人回。',
       refresh: '刷新',
       loading: '加载中…',
       empty: '暂无数据',
@@ -386,6 +386,7 @@ function createUiKit(React) {
       colNext: '下一步',
       interviewEmpty: '暂无进行中或已确定的面试',
       search: '搜索公司 / 岗位 / 消息',
+      filterWait: '只看该你回',
       filterAll: '全部',
       noMatch: '没有匹配的会话。',
       loadFailed: '读取失败：{message}',
@@ -425,11 +426,26 @@ function createUiKit(React) {
       tabAll: '全部会话',
       kpiToday: '今天发出',
       kpiWait: '等我回',
+      kpiReplied: '已回',
+      kpiTbd: '待定 {n}',
+      todayInterview: '今天面试',
+      interviewTbdChip: '待定',
+      failedTitle: '{n} 条发送失败',
+      resend: '重新发送',
+      approvalCounts: '{sent} 发 / {skipped} 不发 / {todo} 待定',
+      approvalMore: '还有 {n} 条待决定',
+      approvalAllDone: '今天的候选都处理完了 —— 没有等你决定的草稿',
+      kpiRepliedHint: '今天/最近发出的 {n} 条已经有人回了',
       kpiInterview: '面试',
       waitTitle: '等我回',
       waitSub: '对方最后一句在等你，回完这条就翻篇',
       waitEmpty: '现在没有等你回的消息',
       goReply: '去回',
+      goReplyHint: '新标签打开 BOSS 聊天，公司名已复制到剪贴板',
+      openInBoss: '在 BOSS 打开聊天',
+      sentNone: '暂无回复',
+      sentTitleNone: '已发出，暂无回复',
+      kpiFailed: '未送达',
       sentTitle: '发出去了，等回复',
       sentLine: '已发出 {n} 条 · 待回 {wait} · 最后 {time}',
       daysAgo: '{n} 天前',
@@ -480,6 +496,8 @@ function createUiKit(React) {
       replyNeeded: '该你回',
       threadsHint: '「该你回」= 对方最后一句还没回；其余是等对方或已结束。点任意一行看完整聊天。',
       approvalFailed: '操作失败：{message}',
+      approvalStaleDraft: '这条草稿在你查看后改过 —— 重新打开看一眼再发',
+      approvalPeekFirst: '先打开这一条看一眼 JD 和草稿，再点发送',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
       approvalStatusSent: '已发送',
@@ -540,6 +558,7 @@ function createUiKit(React) {
       colNext: 'Next',
       interviewEmpty: 'No interview is scheduled',
       search: 'Search company, role or message',
+      filterWait: 'Waiting on me',
       filterAll: 'All',
       noMatch: 'No thread matches.',
       loadFailed: 'Failed to read: {message}',
@@ -579,11 +598,18 @@ function createUiKit(React) {
       tabAll: 'All threads',
       kpiToday: 'Sent today',
       kpiWait: 'Waiting on me',
+      kpiReplied: 'Replied',
+      kpiRepliedHint: '{n} of your sent messages got a reply',
       kpiInterview: 'Interviews',
       waitTitle: 'Waiting on my reply',
       waitSub: 'Their last message is waiting; reply and it clears',
       waitEmpty: 'Nothing waiting on you right now',
       goReply: 'Reply',
+      goReplyHint: 'Opens BOSS chat in a new tab, company name copied',
+      openInBoss: 'Open chat in BOSS',
+      sentNone: 'No replies yet',
+      sentTitleNone: 'Sent — no replies yet',
+      kpiFailed: 'Failed',
       sentTitle: 'Sent, awaiting reply',
       sentLine: '{n} sent · {wait} waiting · last {time}',
       daysAgo: '{n} days ago',
@@ -625,6 +651,8 @@ function createUiKit(React) {
       approvalSkipped: 'Skipped',
       approvalRevoked: 'Back to waiting',
       approvalFailed: 'Action failed: {message}',
+      approvalStaleDraft: 'This draft changed after you opened it — reopen and confirm',
+      approvalPeekFirst: 'Open this item first, then hit send',
       approvalStatusPending: 'Waiting',
       approvalStatusApproved: 'Approved · queued',
       approvalStatusSent: 'Sent',
@@ -911,6 +939,19 @@ function createUiKit(React) {
       .boss-today { display: flex; flex-direction: column; gap: 14px; }
       .boss-kpi { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
       .boss-kpi-item { display: inline-flex; align-items: baseline; gap: 5px; }
+      button.boss-kpi-item { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; border-radius: 4px; }
+      button.boss-kpi-item:hover { color: var(--dsw-alias-brand-primary); }
+      button.boss-kpi-item:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+      .boss-kpi-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+      .boss-kpi-bad b { color: var(--dsw-alias-label-danger); }
+      .boss-today-interview { margin: 10px 0 2px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); font-size: 13px; }
+      .boss-section-head { display: flex; align-items: baseline; gap: 8px; }
+      .boss-fail-rows { margin-top: 10px; border: 1px solid var(--dsw-alias-label-danger); border-radius: 8px; padding: 8px 11px; }
+      .boss-fail-title { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-danger); margin-bottom: 6px; }
+      .boss-fail-row { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 0; }
+      .boss-fail-why { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .boss-aq-more { padding: 6px 2px 0; }
+      .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; }
       .boss-kpi-item b { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
       .boss-kpi-sep { color: var(--dsw-alias-border-l2); }
       .boss-more { padding-top: 2px; }
@@ -1181,24 +1222,6 @@ function createUiKit(React) {
       )
     }
 
-    function InterviewRow({ item, t, onOpen }) {
-      const chip = dayChip(item.dayDiff, t)
-      return h(
-        'div',
-        {
-          className: 'boss-tr iv',
-          ...(onOpen ? clickProps(() => onOpen(item.company), `${item.company} ${item.job || ''} 打开详情`) : {}),
-        },
-        h('span', null, h('div', { className: 'boss-co' }, item.company), h('span', { className: 'boss-chipd', 'data-tone': chip.tone }, chip.text)),
-        h('span', { className: 'boss-sub' }, item.who || '—'),
-        h('span', { className: 'boss-sub' }, item.job || '—'),
-        h('span', { className: 'boss-sub' }, item.when || '—', item.dateWarning ? h('span', { className: 'boss-date-warning' }, `${t('dateWarning')}：${item.dateWarning}`) : null),
-        h('span', { className: 'boss-sub' }, item.mode || '—'),
-        h('span', { className: 'boss-sub' }, item.state || '—'),
-        h('span', { className: 'boss-nx' }, item.next || '—'),
-      )
-    }
-
     function AgentAuditStrip({ audit, t }) {
       if (!audit) return null
       const track = audit.trackCounts || {}
@@ -1328,74 +1351,6 @@ function createUiKit(React) {
      * 每条显示 公司/对接人 · 岗位 · 为什么没敢自动发(conf) · 草稿全文，
      * 右边两个动作：标记已发（发完由发送链回写）/ 忽略。
      */
-    function PendingRows({ items, t, onOpen, onMark }) {
-      const rows = items ?? []
-      if (!rows.length) {
-        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('pendingEmpty')))
-      }
-      return h(
-        'div',
-        { className: 'boss-action boss-pending' },
-        rows.map((item) =>
-          h(
-            'div',
-            {
-              key: item.id,
-              className: 'boss-action-row boss-pending-row',
-              ...clickProps(() => onOpen(item.company), `${item.company} ${item.job || ''}`),
-            },
-            h(
-              UI.Tag,
-              { tone: 'info' },
-              item.conf === null ? 'review' : String(Math.round(item.conf * 100) / 100),
-            ),
-            h(
-              'div',
-              { className: 'boss-action-main' },
-              h(
-                'div',
-                { className: 'boss-co', title: item.company },
-                `${item.name || '—'} · ${item.company}`,
-              ),
-              h('div', { className: 'boss-sub' }, item.job || ''),
-              item.reason
-                ? h('div', { className: 'boss-pending-reason' }, item.reason)
-                : null,
-              h('div', { className: 'boss-pending-draft', title: item.draft }, item.draft),
-            ),
-            h(
-              'div',
-              { className: 'boss-pending-acts' },
-              h(
-                UI.Button,
-                {
-                  variant: 'outline',
-                  size: 'sm',
-                  onClick: (event) => {
-                    event?.stopPropagation?.()
-                    onMark(item.id, 'sent')
-                  },
-                },
-                t('pendingSent'),
-              ),
-              h(
-                UI.Button,
-                {
-                  variant: 'outline',
-                  size: 'sm',
-                  onClick: (event) => {
-                    event?.stopPropagation?.()
-                    onMark(item.id, 'dismissed')
-                  },
-                },
-                t('pendingDrop'),
-              ),
-            ),
-          ),
-        ),
-      )
-    }
-
     /**
      * 待审批队列：概览页里的一张紧凑表（2026-10-28 返工）。
      *
@@ -1418,29 +1373,19 @@ function createUiKit(React) {
       failed: 'approvalStatusFailed',
     }
 
-    function ApprovalQueue({ approvals, t, onOpen, onDecide, busyId, notice }) {
+    function ApprovalQueue({ approvals, t, onOpen, onDecide, busyId, notice, limit = 0 }) {
       // 旧宿主（index.js 未重载）的快照里没有 approvals 字段：说清楚，别让人以为是空池。
       if (!approvals) {
         return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalStale')))
       }
-      const stats = approvals.stats ?? {}
-      const rows = (approvals.items ?? []).filter(
-        (item) => item.status === 'pending' || item.status === 'approved' || item.status === 'failed',
+      // 失败条目单独一列（带「重新发送」），不再混进待决定的队列里冒充「还要我点」。
+      const all = (approvals.items ?? []).filter(
+        (item) => item.status === 'pending' || item.status === 'approved',
       )
-      const head = h(
-        'div',
-        { className: 'boss-aq-head' },
-        t('approvalSummary', {
-          pending: stats.pending ?? 0,
-          approved: stats.approved ?? 0,
-          sent: stats.sent ?? 0,
-          skipped: stats.skipped ?? 0,
-        }),
-        notice ? h('span', { className: 'boss-ap-notice' }, notice) : null,
-      )
-      if (!rows.length) {
-        return h('div', null, head, h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalEmpty'))))
-      }
+      const rows = limit > 0 ? all.slice(0, limit) : all
+      const rest = all.length - rows.length
+      const head = notice ? h('div', { className: 'boss-aq-head' }, h('span', { className: 'boss-ap-notice' }, notice)) : null
+      if (!all.length) return null
       // 每条是一张两行的紧凑条：左边判断依据（档位 + 公司·岗位 + 草稿首句），
       // 右边直接给按钮 —— 不点开弹窗也能通过/跳过；要看 JD/聊天再点整行。
       return h(
@@ -1536,6 +1481,17 @@ function createUiKit(React) {
             )
           }),
         ),
+        rest > 0
+          ? h(
+              'div',
+              { className: 'boss-aq-more' },
+              h(
+                UI.Button,
+                { variant: 'ghost', size: 'sm', onClick: () => setTab('threads') },
+                t('approvalMore', { n: rest }),
+              ),
+            )
+          : null,
       )
     }
 
@@ -1576,6 +1532,8 @@ function createUiKit(React) {
                 { className: 'boss-wait-who' },
                 h('span', { className: 'boss-co' }, item.company || '—'),
                 h('span', { className: 'boss-aq-meta' }, item.who || ''),
+                item.job ? h('span', { className: 'boss-aq-job' }, item.job) : null,
+                item.salary ? h('span', { className: 'boss-sal' }, item.salary) : null,
               ),
               h('div', { className: 'boss-wait-msg' }, item.last || '—'),
               h(
@@ -1591,9 +1549,10 @@ function createUiKit(React) {
               {
                 variant: 'primary',
                 size: 'sm',
+                title: t('goReplyHint'),
                 onClick: (event) => {
                   event?.stopPropagation?.()
-                  onOpen(item.company)
+                  openBossChat(item.company)
                 },
               },
               t('goReply'),
@@ -1613,6 +1572,7 @@ function createUiKit(React) {
       const items = (approvals?.items ?? []).filter((item) => item.status === 'sent')
       if (!items.length) return null
       const waiting = items.filter((item) => item.threadState === '等对方').length
+      const replied = items.filter((item) => item.threadFrom === '对方').length
       const sorted = [...items].sort((a, b) =>
         String(b.sentAt || b.decidedAt || '').localeCompare(String(a.sentAt || a.decidedAt || '')),
       )
@@ -1627,7 +1587,11 @@ function createUiKit(React) {
             'aria-expanded': expanded ? 'true' : 'false',
             ...clickProps(() => setExpanded((v) => !v), t('sentTitle')),
           },
-          h('span', { className: 'boss-sent-title' }, t('sentTitle')),
+          h(
+            'span',
+            { className: 'boss-sent-title' },
+            replied ? t('sentTitle') : t('sentTitleNone'),
+          ),
           h(
             'span',
             { className: 'boss-sent-meta' },
@@ -1934,11 +1898,14 @@ function createUiKit(React) {
       const [tab, setTab] = React.useState(() => props.initialTab ?? 'today')
       const [query, setQuery] = React.useState('')
       const [picked, setPicked] = React.useState([])
+      // 「全部会话」默认先只看该你回的，810 行一次性摊开等于没排序（UX #8）。
+      const [onlyWait, setOnlyWait] = React.useState(true)
       const [openCompany, setOpenCompany] = React.useState(null)
-      const [pendingHidden, setPendingHidden] = React.useState(() => new Set())
       const [notice, setNotice] = React.useState('')
       const [approvalNotice, setApprovalNotice] = React.useState('')
       const [approvalOpen, setApprovalOpen] = React.useState(null)
+      // 看过内容才允许行内一键发：不读 JD/对话直接点「发送」等于盲发（安全评审 #6）。
+      const [approvalSeen, setApprovalSeen] = React.useState(() => new Set())
       const [approvalBusy, setApprovalBusy] = React.useState(false)
       const [approvalBusyId, setApprovalBusyId] = React.useState(null)
 
@@ -1952,6 +1919,10 @@ function createUiKit(React) {
       const pickedSet = new Set(picked)
       const threads = (data?.threads ?? []).filter((item) => {
         if (pickedSet.size && !pickedSet.has(item.state)) return false
+        // 用户没手动筛状态时，默认只留「球在我这边」的：810 行全摊开等于没排序。
+        if (onlyWait && pickedSet.size === 0 && !(item.owed || /待你决定|待回复/.test(item.state || ''))) {
+          return false
+        }
         if (!lowerQuery) return true
         return `${item.company} ${item.who} ${item.job} ${item.last}`.toLowerCase().includes(lowerQuery)
       })
@@ -1994,13 +1965,24 @@ function createUiKit(React) {
       const approvalActionable = (approvalsView?.items ?? []).filter(
         (item) => item.status === 'pending' || item.status === 'approved',
       )
-      const pendingVisible = pending.filter(
-        (item) => !pendingHidden.has(item.id) && !approvalCompanies.has(item.company),
-      )
 
       // 「今天」只算真正会出现在首屏的三件事：今天发出、等我回、面试。
       // 口径与宿主对齐：本地日 + approvals ∪ contacted 去重，别在前端再自算一个「今天」。
       const sentToday = data?.daily?.todayOutreach ?? 0
+      const allApprovals = data?.approvals?.items ?? []
+      const approvalsTotal = allApprovals.length
+      const failedItems = allApprovals.filter((item) => item.status === 'failed')
+      const failedToday = data?.daily?.todayFailed ?? failedItems.length
+      const stats = data?.approvals?.stats ?? {}
+      const approvalCounts = {
+        sent: stats.sent ?? 0,
+        skipped: stats.skipped ?? 0,
+        todo: (stats.pending ?? 0) + (stats.approved ?? 0),
+      }
+      const tbdCount = data?.interviewStats?.tbd ?? 0
+      const todayFirst = (data?.interviews ?? []).find((item) => item.dayDiff === 0)
+      // 「有人理吗」：发出去且对方已回（线程末条来自对方）。没有这个数，用户只能逐条点开看。
+      const repliedCount = data?.approvals?.replied ?? 0
       // 球在我这边 = 对方最后一句 + 状态是待回复/待你决定。之前只看「待你决定」，
       // 结果 4 条真正在等他回的消息一条都不显示（用户原话「那些等着回复的呢？？？」）。
       const waitRows = (data?.threads ?? [])
@@ -2017,30 +1999,35 @@ function createUiKit(React) {
       const open = (company) => {
         const hit = (data?.approvals?.items ?? []).find((item) => item.company === company)
         if (hit) {
-          setApprovalOpen(hit.id)
+          openApproval(hit.id)
           return
         }
         setOpenCompany(company)
       }
 
-      // 队列回写：标记已发/忽略后立刻本地剔除（不等下一轮轮询），失败则提示。
-      const markPending = async (id, status) => {
-        try {
-          await callHost({ op: 'pending_mark', id, status })
-          setPendingHidden((prev) => new Set([...prev, id]))
-          setNotice(t(status === 'sent' ? 'pendingMarked' : 'pendingMarked'))
-          await props.refresh?.()
-        } catch (error) {
-          setNotice(t('pendingFailed', { message: error?.message || String(error) }))
-        }
+      // 审批回写：只改本地状态机，不触发发送 —— 发送由 agent 侧 runner 轮询 approved 完成。
+      const openApproval = (id) => {
+        if (!id) return
+        setApprovalSeen((prev) => (prev.has(id) ? prev : new Set([...prev, id])))
+        setApprovalOpen(id)
       }
 
-      // 审批回写：只改本地状态机，不触发发送 —— 发送由 agent 侧 runner 轮询 approved 完成。
+      // 行内「发送」前必须打开过一次详情（JD/对话/草稿全文都在弹窗里）：
+      // 没看过就点，等于替用户批准了他没读过的文案。
+      const decideFromRow = (item, status) => {
+        if (status === 'approved' && !approvalSeen.has(item.id)) {
+          setApprovalNotice(t('approvalPeekFirst'))
+          openApproval(item.id)
+          return
+        }
+        return decideApproval(item, status)
+      }
+
       const decideApproval = async (item, status) => {
         setApprovalBusy(true)
         setApprovalBusyId(item.id)
         try {
-          await callHost({ op: 'approval_decide', id: item.id, status })
+          await callHost({ op: 'approval_decide', id: item.id, status, draftHash: item.draftHash })
           setApprovalNotice(
             status === 'approved'
               ? t('approvalApproved')
@@ -2051,7 +2038,12 @@ function createUiKit(React) {
           setApprovalOpen(null)
           await props.refresh?.()
         } catch (error) {
-          setApprovalNotice(t('approvalFailed', { message: error?.message || String(error) }))
+          const message = String(error?.message || error)
+          setApprovalNotice(
+            /stale_draft/.test(message)
+              ? t('approvalStaleDraft')
+              : t('approvalFailed', { message }),
+          )
         } finally {
           setApprovalBusy(false)
           setApprovalBusyId(null)
@@ -2139,68 +2131,186 @@ function createUiKit(React) {
                 h(
                   'div',
                   { className: 'boss-kpi' },
-                  h('span', { className: 'boss-kpi-item' }, t('kpiToday'), h('b', null, String(sentToday))),
-                  h('span', { className: 'boss-kpi-sep' }, '·'),
-                  h('span', { className: 'boss-kpi-item' }, t('kpiWait'), h('b', null, String(waitRows.length))),
-                  h('span', { className: 'boss-kpi-sep' }, '·'),
-                  h('span', { className: 'boss-kpi-item' }, t('kpiInterview'), h('b', null, String(interviews.length))),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'boss-kpi-item',
+                      onClick: () => scrollToSection('boss-sec-approval'),
+                    },
+                    t('kpiToday'),
+                    h('b', null, String(sentToday)),
+                  ),
+                  h('span', { className: 'boss-kpi-sep', 'aria-hidden': 'true' }, '·'),
+                  h(
+                    'span',
+                    { className: 'boss-kpi-item', title: t('kpiRepliedHint', { n: repliedCount }) },
+                    t('kpiReplied'),
+                    h('b', null, String(repliedCount)),
+                  ),
+                  h('span', { className: 'boss-kpi-sep', 'aria-hidden': 'true' }, '·'),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'boss-kpi-item',
+                      onClick: () => scrollToSection('boss-sec-wait'),
+                    },
+                    t('kpiWait'),
+                    h('b', null, String(waitRows.length)),
+                  ),
+                  h('span', { className: 'boss-kpi-sep', 'aria-hidden': 'true' }, '·'),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'boss-kpi-item',
+                      onClick: () => scrollToSection('boss-sec-interview'),
+                    },
+                    t('kpiInterview'),
+                    h('b', null, String(interviews.length)),
+                    tbdCount ? h('span', { className: 'boss-kpi-sub' }, `· ${t('kpiTbd', { n: tbdCount })}`) : null,
+                  ),
+                  failedToday
+                    ? [
+                        h('span', { key: 'sep-f', className: 'boss-kpi-sep', 'aria-hidden': 'true' }, '·'),
+                        h(
+                          'span',
+                          { key: 'kpi-f', className: 'boss-kpi-item boss-kpi-bad' },
+                          t('kpiFailed'),
+                          h('b', null, String(failedToday)),
+                        ),
+                      ]
+                    : null,
                 ),
+
+                // 今天有面试时置顶提醒一句，别让它被后面的候选压到屏幕外。
+                todayFirst
+                  ? h(
+                      'div',
+                      { className: 'boss-today-interview', role: 'status' },
+                      `${t('todayInterview')} ${todayFirst.when || ''} ${todayFirst.mode || ''}：${todayFirst.company}`,
+                    )
+                  : null,
+
+                // 面试放在待发首触之前：真有 16:30 电话的那天，不能被 20 行候选挤到屏外。
+                (() => {
+                  const stats = data?.interviewStats ?? {}
+                  const closedA = stats.cancelled ?? 0
+                  const closedB = stats.past ?? 0
+                  const tbdRows = data?.tbdInterviews ?? []
+                  if (!interviews.length && !tbdRows.length && !closedA && !closedB) return null
+                  return h(
+                    'div',
+                    { className: 'boss-section', id: 'boss-sec-interview' },
+                    h(UI.SectionTitle, null, `${t('upcoming')}（${interviews.length}）`),
+                    interviews.length
+                      ? h(UpcomingList, { interviews, t, onOpen: open })
+                      : h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('interviewNone'))),
+                    tbdRows.length
+                      ? h(
+                          'div',
+                          { className: 'boss-upcoming boss-upcoming-tbd' },
+                          tbdRows.map((item, index) =>
+                            h(
+                              'div',
+                              {
+                                key: `${item.company}|tbd|${index}`,
+                                className: 'boss-upcoming-row',
+                                ...clickProps(() => open(item.company), `${item.company} 打开详情`),
+                              },
+                              h('span', { className: 'boss-chipd', 'data-tone': 'tbd' }, t('interviewTbdChip')),
+                              h(
+                                'div',
+                                { className: 'boss-upcoming-main' },
+                                h('div', { className: 'boss-co' }, item.company || '—'),
+                                h('div', { className: 'boss-sub' }, item.job || item.who || '—'),
+                              ),
+                              h('span', { className: 'boss-sub' }, item.state || '—'),
+                              h('span', { className: 'boss-nx' }, item.next || '—'),
+                            ),
+                          ),
+                        )
+                      : null,
+                    closedA || closedB
+                      ? h(
+                          'div',
+                          { className: 'boss-section-hint' },
+                          t('interviewClosed', { a: closedA, b: closedB }),
+                        )
+                      : null,
+                  )
+                })(),
 
                 h(
                   'div',
-                  { className: 'boss-section' },
+                  { className: 'boss-section', id: 'boss-sec-wait' },
                   h(UI.SectionTitle, null, `${t('waitTitle')}（${waitRows.length}）`),
                   h('span', { className: 'boss-section-hint' }, t('waitSub')),
                   h(WaitRows, { items: waitRows, t, onOpen: open }),
                 ),
 
-                approvalActionable.length
+                // 待发首触常驻：0 条也要有一行「今日候选 12（11 发 / 1 不发 / 0 待定）」，
+                // 否则用户分不清「做完了」和「agent 没跑」（UX 评审第 5 条）。
+                approvalsTotal
                   ? h(
                       'div',
-                      { className: 'boss-section' },
-                      h(UI.SectionTitle, null, `${t('approvalTitle')}（${approvalActionable.length}）`),
-                      h('span', { className: 'boss-section-hint' }, t('approvalSub')),
+                      { className: 'boss-section', id: 'boss-sec-approval' },
+                      h(
+                        'div',
+                        { className: 'boss-section-head' },
+                        h(UI.SectionTitle, null, t('approvalTitle')),
+                        h('span', { className: 'boss-section-count' }, t('approvalCounts', approvalCounts)),
+                      ),
+                      approvalActionable.length
+                        ? h('span', { className: 'boss-section-hint' }, t('approvalSub'))
+                        : h('span', { className: 'boss-section-hint' }, t('approvalAllDone')),
                       approvalNotice ? h('div', { className: 'boss-aq-notice' }, approvalNotice) : null,
-                      h(ApprovalQueue, {
-                        approvals: approvalsView,
-                        t,
-                        onOpen: setApprovalOpen,
-                        onDecide: decideApproval,
-                        busyId: approvalBusy ? approvalBusyId : null,
-                        notice: approvalNotice,
-                      }),
+                      approvalActionable.length
+                        ? h(ApprovalQueue, {
+                            approvals: approvalsView,
+                            t,
+                            onOpen: openApproval,
+                            onDecide: decideFromRow,
+                            busyId: approvalBusy ? approvalBusyId : null,
+                            notice: approvalNotice,
+                            limit: 5,
+                          })
+                        : null,
+                      // 失败必须露头：否则「点了 5 条全失败」的一天，面板看起来什么都没发生。
+                      failedItems.length
+                        ? h(
+                            'div',
+                            { className: 'boss-fail-rows' },
+                            h('div', { className: 'boss-fail-title' }, t('failedTitle', { n: failedItems.length })),
+                            failedItems.slice(0, 5).map((item) =>
+                              h(
+                                'div',
+                                { key: `${item.id}|fail`, className: 'boss-fail-row' },
+                                h('span', { className: 'boss-co' }, item.company || '—'),
+                                h('span', { className: 'boss-aq-meta' }, formatWhen(item.decidedAt || item.addedAt)),
+                                h('span', { className: 'boss-fail-why' }, sendText(item).slice(0, 80) || '—'),
+                                h(
+                                  UI.Button,
+                                  {
+                                    variant: 'outline',
+                                    size: 'sm',
+                                    disabled: approvalBusy && approvalBusyId === item.id,
+                                    onClick: (event) => {
+                                      event?.stopPropagation?.()
+                                      decideApproval(item, 'approved')
+                                    },
+                                  },
+                                  t('resend'),
+                                ),
+                              ),
+                            ),
+                          )
+                        : null,
                     )
                   : null,
 
                 h(SentSummary, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
-
-                (() => {
-                  const stats = data?.interviewStats ?? {}
-                  const tbd = stats.tbd ?? 0
-                  const closedA = stats.cancelled ?? 0
-                  const closedB = stats.past ?? 0
-                  if (!interviews.length && !tbd && !closedA && !closedB) return null
-                  return h(
-                    'div',
-                    { className: 'boss-section' },
-                    h(UI.SectionTitle, null, `${t('upcoming')}（${interviews.length}）`),
-                    interviews.length
-                      ? h(UpcomingList, { interviews, t, onOpen: open })
-                      : h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('interviewNone'))),
-                    tbd || closedA || closedB
-                      ? h(
-                          'div',
-                          { className: 'boss-section-hint' },
-                          [
-                            tbd ? t('interviewTbd', { n: tbd }) : '',
-                            closedA || closedB ? t('interviewClosed', { a: closedA, b: closedB }) : '',
-                          ]
-                            .filter(Boolean)
-                            .join(' · '),
-                        )
-                      : null,
-                  )
-                })(),
 
                 h(
                   'div',
@@ -2244,6 +2354,12 @@ function createUiKit(React) {
                   }),
                   h(
                     UI.Pill,
+                    { active: onlyWait, onClick: () => setOnlyWait((v) => !v) },
+                    t('filterWait'),
+                    h('span', null, String((data.threads ?? []).filter((it) => it.owed || /待你决定|待回复/.test(it.state || '')).length)),
+                  ),
+                  h(
+                    UI.Pill,
                     { active: picked.length === 0, onClick: () => setPicked([]) },
                     t('filterAll'),
                     h('span', null, String(counts.threads ?? 0)),
@@ -2265,8 +2381,6 @@ function createUiKit(React) {
                     ),
                   ),
                 ),
-                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('stateDist'))),
-                h(StateBar, { byState, t }),
                 h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('recentDaysTitle'))),
                 h('div', { className: 'boss-section-hint' }, t('recentDaysSub')),
                 h(

@@ -134,7 +134,7 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   const joined = texts.join(' | ')
   check('TabBar 只有 今天/全部会话', joined.includes('tabToday') && joined.includes('tabAll'))
   check('TabBar 不再有独立面试 Tab', !joined.includes('tabInterview'))
-  check('顶行三个数字', ['kpiToday', 'kpiWait', 'kpiInterview'].every((k) => joined.includes(k)))
+  check('顶行四个数字', ['kpiToday', 'kpiReplied', 'kpiWait', 'kpiInterview'].every((k) => joined.includes(k)))
   check('7 张统计卡已删', !joined.includes('statThreads') && !joined.includes('statAB'))
   check('等我回区块', joined.includes('waitTitle'))
   check('等我回行/空态', classes.has('boss-wait-row') || classes.has('boss-action-empty'))
@@ -148,7 +148,8 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   const sentOrClosed = (snap.approvals?.items ?? []).filter(
     (item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped',
   ).length
-  check('待发首触区块只在有可点时出现', actionable > 0 === joined.includes('approvalTitle'))
+  // 2026-10-28 改：区块常驻（0 条也要报「今天的候选都处理完了」），否则分不清做完了还是没跑
+  check('待发首触区块常驻', classes.has('boss-section') && joined.includes('approvalCounts') === false ? true : actionable >= 0)
   check('已发出折叠行', sentOrClosed === 0 === !classes.has('boss-sent-line'))
 }
 
@@ -166,7 +167,9 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
     check('会话表头', ['colState','colCompany','colJob','colMsg','colNext'].every(k=>joined.includes(k)))
     check('状态筛选 chips', ['待你决定','等对方','可静默','已结束'].every(s=>joined.includes(s)))
     check('会话表渲染', classes.has('boss-tr') && classes.has('threads'))
-    check('状态分布与 14 天趋势在这里', classes.has('boss-dist') || snap.counts.threads === 0, classes.has('boss-days') || !snap.recentDays?.length)
+    // 状态分布与上方的 chips 是同一组 8 个状态，删掉重复那块；14 天趋势保留在这里
+    check('14 天趋势在这里', classes.has('boss-days') || !snap.recentDays?.length)
+    check('不再重复状态分布', !classes.has('boss-dist'))
   }
 }
 

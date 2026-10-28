@@ -179,6 +179,45 @@ async function readJson(file, fallback) {
   }
 }
 
+/** 严格读：区分「文件不存在」和「文件坏了」。审批状态不能把损坏当成空池。 */
+async function readJsonStrict(file, fallback) {
+  let text
+  try {
+    text = await fs.readFile(file, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') return fallback
+    throw operationError('read_failed', `读不到审批文件：${error?.message || error}`)
+  }
+  try {
+    return JSON.parse(text)
+  } catch (error) {
+    throw operationError('corrupt_file', `审批文件不是合法 JSON（${error?.message || error}），先别改状态`)
+  }
+}
+
+/**
+ * 原子写：先写同目录临时文件（0600）再 rename。
+ * 面板和 runner 会同时读写这份文件，直接 writeFile 会把 runner 刚写的 sent 覆盖回 approved。
+ */
+async function writeJsonAtomic(file, value) {
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+  await fs.writeFile(tmp, JSON.stringify(value, null, 1), { mode: 0o600 })
+  await fs.rename(tmp, file)
+}
+
+/** 每次面板决策落一行审计：出了事能回答「谁在什么时候把哪一条改成了什么」。 */
+async function appendApprovalAudit(entry, options = {}) {
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  const dir = path.join(dataDir, '..', '..', 'state')
+  const file = path.join(dir, 'boss_approval_panel_audit.jsonl')
+  try {
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 })
+    await fs.appendFile(file, `${JSON.stringify(entry)}\n`, { mode: 0o600 })
+  } catch {
+    /* 审计写不进去不能挡住用户的决策，但也不静默改状态以外的东西 */
+  }
+}
+
 /** 把时间戳统一成 ISO 字符串，容忍秒/毫秒/无时区。 */
 function toIso(value) {
   if (value === undefined || value === null || value === '') return null
@@ -1184,6 +1223,9 @@ function buildApprovals(doc, threadRows = []) {
       if (!item.threadState && row.state) item.threadState = row.state
       if (!item.threadTime && row.time) item.threadTime = row.time
       if (!item.threadLast && row.last) item.threadLast = row.last
+      // 对方是否已经回了：审批条目的线程末条来自对方，就是「球在对方 → 已经回我了」。
+      // 面板要能直接回答「我今天发出去的，有人理吗」，不能只靠人工点开看（数据审计 #8）。
+      item.threadFrom = row.lastFrom || ''
     }
     out.push(item)
   }
@@ -1194,7 +1236,13 @@ function buildApprovals(doc, threadRows = []) {
   })
   const stats = { total: out.length, pending: 0, approved: 0, sent: 0, skipped: 0, failed: 0 }
   for (const item of out) stats[item.status] = (stats[item.status] ?? 0) + 1
-  return { items: out, stats }
+  const replied = out.filter((item) => item.status === 'sent' && item.threadFrom === '对方')
+  return {
+    items: out,
+    stats,
+    replied: replied.length,
+    repliedCompanies: replied.map((item) => item.company),
+  }
 }
 
 /**
@@ -1308,24 +1356,58 @@ export async function buildApprovalDetail(id, options = {}) {
 export async function markApproval(id, status, options = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR
   const file = fileSet(dataDir).approvals
-  const doc = await readJson(file, { items: [] })
+  const doc = await readJsonStrict(file, { items: [] })
   const items = Array.isArray(doc?.items) ? doc.items : []
   const allowed = ['pending', 'approved', 'skipped']
   if (!allowed.includes(status)) {
     throw operationError('invalid_status', `面板只能切到 ${allowed.join(' / ')}，收到：${status}`)
   }
-  let hit = null
-  for (const item of items) {
-    if (!item || typeof item !== 'object') continue
-    if (String(item.id ?? '') !== String(id)) continue
-    item.status = status
-    item.decidedAt = new Date().toISOString()
-    if (status === 'approved') item.approvedAt = item.decidedAt
-    hit = item
+  // 单向状态机：只能从这些前置状态进入，防止任何持有 token 的脚本把 sent 改回 approved 重复发。
+  const FROM = {
+    approved: ['pending', 'failed'],
+    skipped: ['pending', 'approved'],
+    pending: ['approved', 'skipped'],
   }
+  const hit = items.find((item) => item && typeof item === 'object' && String(item.id ?? '') === String(id))
   if (!hit) throw operationError('not_found', `审批队列里没有这一条：${String(id)}`)
-  await fs.writeFile(file, JSON.stringify({ ...doc, items, ts: new Date().toISOString() }, null, 1))
-  return { ok: true, id: String(id), status, company: String(hit.company ?? '') }
+  const from = String(hit.status ?? 'pending')
+  if (!(FROM[status] ?? []).includes(from)) {
+    throw operationError('invalid_transition', `不能从 ${from} 切到 ${status}`)
+  }
+  // 授权完整性：用户点的是他屏幕上那一版文案，不是「这条 id 的最新版」。
+  if (status === 'approved' && options.draftHash && String(options.draftHash) !== String(hit.draftHash ?? '')) {
+    throw operationError('stale_draft', '这条草稿在你查看后改过，请重新打开确认再发')
+  }
+  const at = new Date().toISOString()
+  hit.status = status
+  hit.decidedAt = at
+  if (status === 'approved') {
+    hit.approvedAt = at
+    hit.approvedDraftHash = String(hit.draftHash ?? '')
+  } else {
+    delete hit.approvedAt
+    delete hit.approvedDraftHash
+  }
+  await writeJsonAtomic(file, { ...doc, items, ts: at })
+  await appendApprovalAudit(
+    {
+      at,
+      id: String(id),
+      company: String(hit.company ?? ''),
+      from,
+      status,
+      draftHash: String(hit.draftHash ?? ''),
+      source: 'panel',
+    },
+    options,
+  )
+  return {
+    ok: true,
+    id: String(id),
+    status,
+    company: String(hit.company ?? ''),
+    draftHash: String(hit.draftHash ?? ''),
+  }
 }
 
 export async function buildDetail(company, options = {}) {
@@ -1451,7 +1533,7 @@ export function apply(ctx, config = {}) {
         const status = String(payload.status ?? '')
         return jsonResponse({
           ok: true,
-          value: await markApproval(payload.id, status, { dataDir }),
+          value: await markApproval(payload.id, status, { dataDir, draftHash: payload.draftHash }),
         })
       }
       if (op === 'ping') {

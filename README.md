@@ -180,9 +180,29 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
    `boss_outbox.sh start` → 轮询结果 → `settle` 回写 `sent|failed`（失败原因存 `sendResult`）。
    没有 approved 时**直接 IDLE 退出，不碰浏览器**。
 
-授权语义：`approved + approvedAt` 这条记录本身就是当次用户授权，脚本据此才设置
-`BOSS_OUTBOX_CONFIRMED=1`；模型不再手写这个环境变量。审计流水：
-`~/.hermes/state/boss_approval_audit.jsonl`（dispatch / blocked / settled / no_result）。
+授权语义：`approved + approvedAt + approvedDraftHash` 这条记录本身就是当次用户授权，脚本据此才设置
+`BOSS_OUTBOX_CONFIRMED=1`；模型不再手写这个环境变量。三道约束缺一不发（2026-10-28 安全评审后加）：
+
+- **授权有寿命**：`approvedAt` 超过 `BOSS_APPROVAL_TTL`（默认 1800 秒）自动退回 `pending`，
+  并在 `note` 记 `approval_expired`。凌晨点过、第二天开机才发的情况不会发生。
+- **授权绑定文案**：决策请求带 `draftHash`，与当前条目不一致直接拒（`stale_draft`）；
+  面板同时保存 `approvedDraftHash`，出队时要求「批准的 hash == 当前 hash == 当前文案 hash」。
+- **单向状态机**：`approved` 只能从 `pending`/`failed` 进，`sent` 不回退；面板侧写审计
+  `~/.hermes/state/boss_approval_panel_audit.jsonl`（谁、何时、从什么状态改成什么、hash）。
+
+## 安全边界（2026-10-28 只读安全评审的实测结论）
+
+- **RPC 不是裸路由**：`/api/boss-panel.rpc` 由宿主 `ctx.connection.fetch` 承载，无凭据 `401`、
+  异源 Origin（含 `null`）`403`、GET `401`、`text/plain` 简单请求 `401`；插件自身不做鉴权，
+  完全依赖宿主的 Origin 白名单 + Cookie。持 token 的本地进程仍可改状态 —— 所以加了上面的单向状态机与审计。
+- **插件不 spawn 进程**：`index.js` 无 `child_process`，面板只写两个状态文件；真正发送在
+  `boss_approval_runner.py`（noagent 定时任务），且有 `pgrep` 串行闸门。
+- **无 XSS 面**：`client.js` 没有 `innerHTML`/`dangerouslySetInnerHTML`，招聘方消息正文按文本渲染。
+- **落盘权限**：数据目录 `0700`、`boss_approvals.json`/`boss_thread_history.json`/`boss_threads_all.json`
+  与 `~/.hermes/state/boss_*.json` 为 `0600`；面板与脚本写入都走「临时文件 + rename」并用 `0600`。
+  队列/结果文件 `approval_queue_*.json` / `approval_result_*.json` 保留 7 天后自动清。
+- **盲发拦截**：行内「发送」必须先打开过一次该条详情（看过 JD/草稿/对话），否则自动打开弹窗并提示；
+  弹窗里常驻「10 分钟内后台发出；发出后不能撤回」。
 
 发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`，**不可覆盖**）与
 `boss_shortlist_gate.py`（首触缺 `job`/`jd` 直接拒发）。首触且无历史会话时，
