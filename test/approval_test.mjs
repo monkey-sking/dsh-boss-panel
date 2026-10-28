@@ -121,7 +121,9 @@ check('渲染候选卡', out.classes.has('boss-ap-card'))
 
 const cards = findAll(tree, (n) => n.props?.className === 'boss-ap-card' || (typeof n.props?.className === 'string' && n.props.className.includes('boss-ap-card')))
 check(`卡片数量 = ${snap.approvals.stats.total}`, cards.length === snap.approvals.stats.total)
-check('卡片含公司名', joined.includes('北京元理无限科技') && joined.includes('上海语生科学技术'))
+const firstCompany = snap.approvals.items[0]?.company ?? ''
+const lastCompany = snap.approvals.items[Math.min(3, snap.approvals.items.length - 1)]?.company ?? ''
+check('卡片含公司名', !!firstCompany && joined.includes(firstCompany) && joined.includes(lastCompany))
 check('卡片含草稿正文', joined.includes('Agent 平台') || joined.includes('敌人 AI'))
 
 const approveBtn = findAll(tree, (n) => n.props?.onClick && textOf(n) === 'approvalApprove')

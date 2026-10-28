@@ -850,7 +850,7 @@ export async function buildSnapshot(options = {}) {
       !/附件简历|已发送|对方已同意|已发送给对方|\.pdf|点击查看附件|欢迎投递|^收到$|^好的$|^OK/.test(fullText)
     ) {
       // UNVSTALE 2026-10-28：探针扫不到的旧行（BOSS 列表只保留近 176 条）会永远挂在
-      // 「未验证」，MetaApp 10-19「合适和您电话具体沟通」这种 9 天前的被动告知就是典型。
+      // 「未验证」，例如 10-19「合适和您电话具体沟通」这种 9 天前的被动告知就是典型。
       // 超过 7 天已无跟进价值 → 归「已结束」，别让一个查不到的会话长期占着待核对。
       const d = daysSince(row.time, today)
       if (d !== null && d >= 7) return '已结束'
