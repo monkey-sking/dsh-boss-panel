@@ -142,6 +142,8 @@ node test/render_test.mjs     # 有状态渲染测试：驱动 今天/全部会�
 node test/approval_test.mjs   # 审批流：合成快照 3 条 → 概览队列行、点行开弹窗、点通过真的 POST approval_decide
 node test/detail_test.mjs     # detail op 字段与聊天记录
 node test/e2e_flow.mjs        # 端到端：JS 宿主 + Python 发送侧的契约（pending→approved→queue→sent；过期批准与改动草稿都被拦）
+node test/state_matrix_test.mjs  # 5×3 状态矩阵：面板 markApproval 与 CLI mark 对同一对 (from,to) 结论必须一致；sent 全拒
+node test/shapes_test.mjs        # 脏形状 fixture：空字段/超长文案/UTC 与本地时间混用，不崩、不乱码、日期桶合法
 ```
 
 `render_test.mjs` 用可变 `useState` 的 React 桩，模拟点击 Tab 按钮后重建组件树，

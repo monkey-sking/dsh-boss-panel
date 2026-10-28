@@ -1530,7 +1530,8 @@ async function markApprovalUnlocked(id, status, options = {}) {
   }
   // 单向状态机：只能从这些前置状态进入，防止任何持有 token 的脚本把 sent 改回 approved 重复发。
   const FROM = {
-    approved: ['pending', 'failed'],
+    // 与 boss_approvals.py 的 TRANSITIONS 同一张表（tests/state_matrix_test.mjs 逐对比）。
+    approved: ['pending', 'failed', 'skipped'],
     skipped: ['pending', 'approved'],
     // failed 也要能回 pending：发送失败后用户唯一的动作是「重新发送」，
     // 如果这里不允许，按钮点了只会弹 invalid_transition，只能手改 JSON。

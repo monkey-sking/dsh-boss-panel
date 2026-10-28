@@ -84,6 +84,11 @@
 - **sent / failed**：只有发送侧（`boss_approvals.py settle`）能写，面板只能「收回」回 pending。
 - 收回语义：用户点「收回」= 把 approved/skipped/failed 退回 pending，已发出的（sent）不回退，
   避免把真实外发记录改成未外发。
+- 允许的迁移以 `boss_approvals.py` 的 `TRANSITIONS` 为唯一真源（sent 只能 `--force` 人工重开）：
+  `pending → approved / skipped / failed`、`approved → pending / failed / skipped`、
+  `failed → pending / approved`、`skipped → pending / approved`。
+  其中 `approved → skipped` 是「点过发送又不想发了」，不必先收回；
+  面板与 CLI 是否一致由 `test/state_matrix_test.mjs` 逐对比对。
 
 三道一致性约束：
 1. `draftHash` 必须仍等于当前 `draft` 的哈希——用户看过的那段文字才允许发出去。
