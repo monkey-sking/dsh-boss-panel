@@ -432,7 +432,7 @@ function createUiKit(React) {
       interviewTbdChip: '待定',
       failedTitle: '{n} 条发送失败',
       resend: '重新发送',
-      approvalCounts: '{sent} 发 / {skipped} 不发 / {todo} 待定',
+      approvalCounts: '候选 {total} · 待发 {todo} · 已发 {sent} · 不发 {skipped}',
       approvalMore: '还有 {n} 条待决定',
       approvalAllDone: '今天的候选都处理完了 —— 没有等你决定的草稿',
       kpiRepliedHint: '今天/最近发出的 {n} 条已经有人回了',
@@ -888,7 +888,9 @@ function createUiKit(React) {
       .boss-daily-sep { color: var(--dsw-alias-label-secondary); margin: 0 6px; }
       .boss-fail { color: var(--dsw-alias-state-warn-primary, #8a4b00); font-weight: 600; }
       .boss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
-      .boss-section { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; }
+      .boss-section { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin: 10px 0 0; }
+      .boss-section > .boss-section-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+      .boss-section-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
       .boss-section-count { font-size: 12px; font-weight: 400; color: var(--dsw-alias-label-secondary); }
       .boss-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .boss-chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -940,7 +942,7 @@ function createUiKit(React) {
       .boss-aq-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 
       /* 待审批条 + 最近发送：一个容器、每行两栏（依据 / 动作），不用表格以免和「等你回复」看串 */
-      .boss-section-hint { margin: 2px 0 8px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+      .boss-section-hint { margin: 0 0 2px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
       .boss-aq-list { display: flex; flex-direction: column; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
       .boss-aq-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l4); }
       .boss-aq-item:last-child { border-bottom: 0; }
@@ -2051,6 +2053,7 @@ function createUiKit(React) {
       const failedToday = data?.daily?.todayFailed ?? failedItems.length
       const stats = data?.approvals?.stats ?? {}
       const approvalCounts = {
+        total: stats.total ?? allApprovals.length,
         sent: stats.sent ?? 0,
         skipped: stats.skipped ?? 0,
         todo: (stats.pending ?? 0) + (stats.approved ?? 0),
@@ -2286,7 +2289,11 @@ function createUiKit(React) {
                   return h(
                     'div',
                     { className: 'boss-section', id: 'boss-sec-interview' },
-                    h(UI.SectionTitle, null, `${t('upcoming')}（${interviews.length}）`),
+                    h(
+                      'div',
+                      { className: 'boss-section-top' },
+                      h(UI.SectionTitle, null, `${t('upcoming')}（${interviews.length}）`),
+                    ),
                     interviews.length
                       ? h(UpcomingList, { interviews, t, onOpen: open })
                       : h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('interviewNone'))),
@@ -2328,8 +2335,12 @@ function createUiKit(React) {
                 h(
                   'div',
                   { className: 'boss-section', id: 'boss-sec-wait' },
-                  h(UI.SectionTitle, null, `${t('waitTitle')}（${waitRows.length}）`),
-                  h('span', { className: 'boss-section-hint' }, t('waitSub')),
+                  h(
+                    'div',
+                    { className: 'boss-section-top' },
+                    h(UI.SectionTitle, null, `${t('waitTitle')}（${waitRows.length}）`),
+                    h('span', { className: 'boss-section-hint' }, t('waitSub')),
+                  ),
                   h(WaitRows, { items: waitRows, t, onOpen: open }),
                 ),
 
