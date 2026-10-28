@@ -881,6 +881,8 @@ function createUiKit(React) {
       .boss-action-row { display: grid; grid-template-columns: 82px minmax(90px, 1.1fr) minmax(80px, .9fr) minmax(120px, 1.6fr); gap: 10px; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
       .boss-action-row:last-child { border-bottom: none; }
       .boss-action-row[data-clickable="true"] { cursor: pointer; }
+      .boss-tr[data-clickable="true"] { cursor: pointer; }
+      .boss-tr[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
       .boss-action-row[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
       .boss-action-main { min-width: 0; }
       .boss-action-nx { min-width: 0; }
@@ -1079,11 +1081,15 @@ function createUiKit(React) {
       )
     }
 
-    function InterviewRow({ item, t }) {
+    function InterviewRow({ item, t, onOpen }) {
       const chip = dayChip(item.dayDiff, t)
       return h(
         'div',
-        { className: 'boss-tr iv' },
+        {
+          className: 'boss-tr iv',
+          'data-clickable': onOpen ? 'true' : undefined,
+          onClick: onOpen ? () => onOpen(item.company) : undefined,
+        },
         h('span', null, h('div', { className: 'boss-co' }, item.company), h('span', { className: 'boss-chipd', 'data-tone': chip.tone }, chip.text)),
         h('span', { className: 'boss-sub' }, item.who || '—'),
         h('span', { className: 'boss-sub' }, item.job || '—'),
@@ -1235,7 +1241,12 @@ function createUiKit(React) {
         rows.map((item) =>
           h(
             'div',
-            { key: item.id, className: 'boss-action-row boss-pending-row' },
+            {
+              key: item.id,
+              className: 'boss-action-row boss-pending-row',
+              'data-clickable': 'true',
+              onClick: () => onOpen(item.company),
+            },
             h(
               UI.Tag,
               { tone: 'info' },
@@ -1247,11 +1258,7 @@ function createUiKit(React) {
               h(
                 'div',
                 { className: 'boss-co', title: item.company },
-                h('span', {
-                  'data-clickable': 'true',
-                  style: { cursor: 'pointer' },
-                  onClick: () => onOpen(item.company),
-                }, `${item.name || '—'} · ${item.company}`),
+                `${item.name || '—'} · ${item.company}`,
               ),
               h('div', { className: 'boss-sub' }, item.job || ''),
               item.reason
@@ -1264,12 +1271,26 @@ function createUiKit(React) {
               { className: 'boss-pending-acts' },
               h(
                 UI.Button,
-                { variant: 'outline', size: 'sm', onClick: () => onMark(item.id, 'sent') },
+                {
+                  variant: 'outline',
+                  size: 'sm',
+                  onClick: (event) => {
+                    event?.stopPropagation?.()
+                    onMark(item.id, 'sent')
+                  },
+                },
                 t('pendingSent'),
               ),
               h(
                 UI.Button,
-                { variant: 'outline', size: 'sm', onClick: () => onMark(item.id, 'dismissed') },
+                {
+                  variant: 'outline',
+                  size: 'sm',
+                  onClick: (event) => {
+                    event?.stopPropagation?.()
+                    onMark(item.id, 'dismissed')
+                  },
+                },
                 t('pendingDrop'),
               ),
             ),
@@ -1421,7 +1442,7 @@ function createUiKit(React) {
     }
 
     /** 最近发送：把已发/失败/跳过摊开，解决「发出去的看不到去向」。 */
-    function SentLog({ approvals, t }) {
+    function SentLog({ approvals, t, onOpen }) {
       const items = (approvals?.items ?? [])
         .filter((item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped')
         .sort((a, b) =>
@@ -1437,7 +1458,13 @@ function createUiKit(React) {
         items.map((item) =>
           h(
             'div',
-            { key: item.id, className: 'boss-aq-item', 'data-status': item.status },
+            {
+              key: item.id,
+              className: 'boss-aq-item',
+              'data-status': item.status,
+              'data-clickable': 'true',
+              onClick: () => onOpen?.(item.id),
+            },
             h(
               'div',
               { className: 'boss-aq-body' },
@@ -1751,7 +1778,17 @@ function createUiKit(React) {
 
       const interviews = data?.interviews ?? []
       const conflictInterviews = interviews.filter((item) => item.dateWarning)
-      const open = (company) => setOpenCompany(company)
+      // 同一家公司不管从哪个列表点进来，看到的都该是同一个弹窗：
+      // 有审批条目的（面板里的候选 / 已发 / 已跳过）→ 审批弹窗（JD·公司·完整聊天·状态）；
+      // 没有审批条目的老会话 → 原来的公司详情弹窗。
+      const open = (company) => {
+        const hit = (data?.approvals?.items ?? []).find((item) => item.company === company)
+        if (hit) {
+          setApprovalOpen(hit.id)
+          return
+        }
+        setOpenCompany(company)
+      }
 
       // 队列回写：标记已发/忽略后立刻本地剔除（不等下一轮轮询），失败则提示。
       const markPending = async (id, status) => {
@@ -1957,7 +1994,7 @@ function createUiKit(React) {
                         h(UI.SectionTitle, null, t('approvalSendLog')),
                         h('span', { className: 'boss-section-count' }, t('approvalSendLogSub')),
                       ),
-                      h(SentLog, { approvals: data.approvals, t }),
+                      h(SentLog, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
                     )
                   : null,
                 pendingVisible.length
@@ -2048,7 +2085,7 @@ function createUiKit(React) {
                   ),
                   interviews.length
                     ? interviews.map((item, index) =>
-                        h(InterviewRow, { key: `${item.company}|${index}`, item, t }),
+                        h(InterviewRow, { key: `${item.company}|${index}`, item, t, onOpen: open }),
                       )
                     : h(
                         UI.EmptyState,

@@ -198,6 +198,27 @@ check('带上条目 id', decide?.id === 'demo-001')
   check('已通过的弹窗只剩「撤回」', revoke.length >= 1 && approveNow.length === 0)
 }
 
+// —— 6b) 最近发送的行也能点开 —— 列表里每个可点的行都该有弹窗，不做区别对待 ——
+{
+  const sentSnap = JSON.parse(JSON.stringify(snap))
+  const target = sentSnap.approvals.items[1]
+  target.status = 'sent'
+  target.sentAt = '2026-10-28T11:40:04Z'
+  target.sendResult = 'sent · 11:40 已送达'
+  store = { getSnapshot: () => ({ loading: false, data: sentSnap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
+  const t4 = renderFresh()
+  const logRows = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props.className.includes('boss-aq-log') === false && n.props['data-clickable'] === 'true')
+  const sentRow = logRows.find((n) => !(n.props.className.includes('boss-aq-log')))
+  const allLog = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item'))
+  check('最近发送里出现 sent 行', allLog.length >= 1)
+  const clickable = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props['data-clickable'] === 'true')
+  check('最近发送行也可点开', clickable.length >= 1)
+  clickable[clickable.length - 1].props.onClick()
+  const t5 = rerender()
+  const body = collect(t5).texts.join(' | ')
+  check('已发行点开后有弹窗内容', body.includes('已送达') || body.includes('approvalStatusSent'))
+}
+
 // —— 7) 宿主侧：真实数据也能给 JD / 公司 / 聊天（内容随日期变，只验结构）——
 {
   const live = liveSnap.approvals?.items ?? []
