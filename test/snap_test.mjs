@@ -17,6 +17,20 @@ try {
   await rm(empty, { recursive: true, force: true })
 }
 
+// 回归：审批文件里混进 null 条目不能让整个快照抛错（工程评审 #1 实测过白屏）。
+const dirty = await mkdtemp(path.join(tmpdir(), 'boss-snap-dirty-'))
+try {
+  await writeFile(
+    path.join(dirty, 'boss_approvals.json'),
+    JSON.stringify({ items: [null, { id: 'ok', company: '示例公司', status: 'pending' }] }),
+  )
+  const s = await buildSnapshot({ dataDir: dirty })
+  assert.equal(s.approvals.items.length, 1, 'null 条目应被跳过，好的条目仍要留下')
+  console.log('SNAP OK (null item tolerated)')
+} finally {
+  await rm(dirty, { recursive: true, force: true })
+}
+
 // 审批链发送只写 boss_approvals.json，且 sentAt 是 UTC ISO —— 简报的「今天已发」
 // 必须按本地日算，不能拿 UTC 日期切片（00:00–08:00 发出的会算到前一天）。
 const clock = await mkdtemp(path.join(tmpdir(), 'boss-snap-clock-'))
