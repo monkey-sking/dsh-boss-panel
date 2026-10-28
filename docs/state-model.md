@@ -89,3 +89,11 @@
 1. `draftHash` 必须仍等于当前 `draft` 的哈希——用户看过的那段文字才允许发出去。
 2. 首触必须有 `jobId` 与 `jdText`（`boss_shortlist_gate.py` 硬要求）。
 3. `fact_blocked` 时状态落 failed，草稿原样保留，供人工改后再放回 pending。
+
+### 首触线程与回复闸门（2026-10-28 补充）
+
+主动打招呼（面板审批队列，条目带 `jobId`）建立的是**空线程**：会话里还没有对方消息。
+`boss_interview_guard.js` 的回复闸门原本要求「当前必须有一条对方消息」，首触会被判
+`REPLY_POLICY: current recruiter message required`，导致 9 条全部失败。现在 `assertInterviewPolicy`
+支持 `allowEmptyThread`，只有携带 `jobId` 的首触条目会带上它；首触的事实与档位由
+`boss_fact_gate.py` / `boss_shortlist_gate.py` 负责（后者的 REVIEW 在面板审批流里降级为 `FIT_WARN`）。

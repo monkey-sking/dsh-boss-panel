@@ -167,9 +167,14 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
 `BOSS_OUTBOX_CONFIRMED=1`；模型不再手写这个环境变量。审计流水：
 `~/.hermes/state/boss_approval_audit.jsonl`（dispatch / blocked / settled / no_result）。
 
-发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`）与
+发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`，**不可覆盖**）与
 `boss_shortlist_gate.py`（首触缺 `job`/`jd` 直接拒发）。首触且无历史会话时，
 `boss_outbox_send.js` 会先用 `item.jobId` 打开 JD 页点「立即沟通」再发。
+
+档位闸门的例外：审批队列的条目都是用户在面板上逐条看过 JD 与草稿后点的「通过并发送」，
+所以队列里带 `shortlistOverride: true`，`boss_shortlist_gate.py` 判 REVIEW 时降级为
+`FIT_WARN`（记进结果 `tail` 与审计），不再拦发。事实闸门没有这个例外 —— 文案里
+碰到年限/上线状态等硬事实仍然直接 `fact_blocked`，只能改文案后让用户重新点。
 
 ### 发送链的坑（2026-10-28 实测，改之前先看）
 
