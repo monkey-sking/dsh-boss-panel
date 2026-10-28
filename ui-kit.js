@@ -115,7 +115,7 @@ export function createUiKit(React) {
 .dp-tab { position: relative; justify-content: center; height: 34px; padding: 0 12px; border-radius: var(--dsw-radius-md); border: none; background: transparent; color: var(--dsw-alias-label-secondary); transition: color 180ms ease; cursor: pointer; font: inherit; }
 .dp-tab:hover, .dp-tab[aria-selected='true'] { background: transparent; color: var(--dsw-alias-label-primary); }
 .dp-tab[aria-selected='true'] { font-weight: 600; }
-.dp-tab:focus-visible { outline: none; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.dp-tab:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; border-radius: 8px; }
 @media (prefers-reduced-motion: reduce) { .dp-tabs-indicator, .dp-tab { transition: none; } }
 
 /* SearchInput */
@@ -203,7 +203,9 @@ export function createUiKit(React) {
 
   function Pill({ active = false, onClick, type = 'button', children }) {
     const cls = `dp-pill${onClick ? ' dp-pill-interactive' : ''}${active ? ' dp-pill-active' : ''}`
-    return h('button', { type, className: cls, onClick }, children)
+    // 筛选胶囊：选中状态只靠颜色/阴影，读屏听不出来（a11y 评审 #19）。
+    const a11y = onClick ? { 'aria-pressed': active ? 'true' : 'false' } : {}
+    return h('button', { type, className: cls, onClick, ...a11y }, children)
   }
 
   function StateDot({ state = 'idle' }) {
@@ -236,10 +238,21 @@ export function createUiKit(React) {
     return h('div', { className: 'dp-tabs', role: 'tablist', 'aria-label': ariaLabel, ref },
       h('div', { className: 'dp-tabs-indicator',
         style: { transform: `translateX(${ind.x - 4}px)`, width: ind.w ? `${ind.w}px` : undefined } }),
-      tabs.map(t => h('button', {
+      // roving tabindex + 左右方向键：tablist 的标准键盘模型（a11y 评审 #12）。
+      tabs.map((t, i) => h('button', {
         key: t.value, role: 'tab', type: 'button',
         className: 'dp-tab', 'aria-selected': t.value === value,
+        tabIndex: t.value === value ? 0 : -1,
         onClick: () => onChange(t.value),
+        onKeyDown: (e) => {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+          e.preventDefault()
+          const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length]
+          onChange(next.value)
+          const el = ref.current?.querySelector(`.dp-tab[data-value="${next.value}"]`)
+          el?.focus?.()
+        },
+        'data-value': t.value,
       }, t.label)))
   }
 
@@ -265,21 +278,42 @@ export function createUiKit(React) {
     const dialogRef = useRef(null)
     const prevFocus = useRef(null)
 
+    // onClose 一律是调用方的内联箭头，面板每 15s 轮询就换一个新函数。
+    // 若把它写进依赖，effect 会反复重跑：焦点被抢回第一个按钮、关闭后焦点掉到 body。
+    // 所以 onClose 走 ref，effect 只在 open 真正变化时执行（2026-10-28 a11y 评审 #4）。
+    const closeRef = useRef(onClose)
+    closeRef.current = onClose
     useEffect(() => {
       if (!open) return
       prevFocus.current = document.activeElement
       const el = dialogRef.current
-      if (el) {
-        const f = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
-        ;(f || el).focus?.()
+      const focusables = () => (el ? Array.from(el.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )).filter((n) => !n.disabled && n.offsetParent !== null) : [])
+      const first = focusables()[0]
+      ;(first || el)?.focus?.()
+      const onKey = (e) => {
+        if (e.key === 'Escape') { e.stopPropagation(); closeRef.current?.(); return }
+        if (e.key !== 'Tab' || !el) return
+        // 焦点陷阱：Tab 在弹窗内部循环，不许漏到背后的面板行上。
+        const list = focusables()
+        if (!list.length) { e.preventDefault(); el.focus?.(); return }
+        const head = list[0]
+        const tail = list[list.length - 1]
+        if (e.shiftKey && (document.activeElement === head || !el.contains(document.activeElement))) {
+          e.preventDefault(); tail.focus?.()
+        } else if (!e.shiftKey && (document.activeElement === tail || !el.contains(document.activeElement))) {
+          e.preventDefault(); head.focus?.()
+        }
       }
-      const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
       document.addEventListener('keydown', onKey, true)
+      const restore = prevFocus.current
       return () => {
         document.removeEventListener('keydown', onKey, true)
-        try { prevFocus.current?.focus?.() } catch { /* ignore */ }
+        // 只有原来那个元素还在文档里才回焦，否则焦点会被丢到 body。
+        try { if (restore && restore.isConnected !== false) restore.focus?.() } catch { /* ignore */ }
       }
-    }, [open, onClose])
+    }, [open])
 
     if (!open) return null
     const closeOnBackdrop = (e) => { if (e.target === e.currentTarget) onClose() }
@@ -306,15 +340,18 @@ export function createUiKit(React) {
     const show = useCallback((text, opts = {}) => {
       const id = ++idc.current
       const tone = opts.tone || 'info'
-      const hold = opts.hold || 3000
+      // 3000ms 常比读屏念完一句还短，改成 6000ms（2026-10-28 a11y 评审 #21）。
+      const hold = opts.hold || 6000
       setItems(xs => [...xs, { id, text, tone, hold }])
       setTimeout(() => setItems(xs => xs.filter(x => x.id !== id)), hold + 1100)
       return id
     }, [])
     const dismiss = useCallback((id) => setItems(xs => xs.filter(x => x.id !== id)), [])
     const iconFor = (tone) => tone === 'success' ? h(IconCheck) : tone === 'info' ? h(IconInfo) : h(IconWarn)
+    // aria-live：审批「发送/不发」这类不可逆动作的唯一反馈就是 toast，
+    // 没有 live region 时读屏用户完全不知道点没点生效（2026-10-28 a11y 评审 #5）。
     const node = items.map(it =>
-      h('div', { key: it.id, className: 'dp-toast', style: { '--dp-toast-hold': `${it.hold}ms` } },
+      h('div', { key: it.id, className: 'dp-toast', role: 'status', 'aria-live': 'polite', style: { '--dp-toast-hold': `${it.hold}ms` } },
         h('span', { className: 'dp-toast-icon', 'data-tone': it.tone }, iconFor(it.tone)),
         h('span', { className: 'dp-toast-text' }, it.text)))
     return { show, dismiss, node }

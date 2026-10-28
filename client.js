@@ -817,7 +817,7 @@ function createUiKit(React) {
       .boss-daily { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; line-height: 20px; }
       .boss-daily b { font-variant-numeric: tabular-nums; }
       .boss-daily-sep { color: var(--dsw-alias-label-secondary); margin: 0 6px; }
-      .boss-fail { color: var(--dsw-alias-state-warn-primary); }
+      .boss-fail { color: var(--dsw-alias-state-warn-primary, #8a4b00); font-weight: 600; }
       .boss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
       .boss-section { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; }
       .boss-section-count { font-size: 12px; font-weight: 400; color: var(--dsw-alias-label-secondary); }
@@ -840,17 +840,18 @@ function createUiKit(React) {
       .boss-sal { display: inline-block; margin-left: 6px; font-size: 11.5px; color: var(--dsw-alias-brand-primary); }
       .boss-chipd { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 11px; line-height: 16px; border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); white-space: nowrap; }
       .boss-chipd[data-tone="hot"] { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); font-weight: 600; }
-      .boss-chipd[data-tone="warn"] { color: var(--dsw-alias-state-warn-primary); border-color: var(--dsw-alias-state-warn-primary); }
-      .boss-chipd[data-tone="ok"] { color: var(--dsw-alias-state-success-primary); border-color: var(--dsw-alias-state-success-primary); }
-      .boss-chipd[data-tone="past"], .boss-chipd[data-tone="tbd"] { opacity: .7; }
-      .boss-date-warning { display: block; margin-top: 2px; color: var(--dsw-alias-state-warn-primary); font-size: 11px; line-height: 16px; }
-      .boss-conflict-banner { border: 1px solid var(--dsw-alias-state-warn-primary); border-radius: 10px; padding: 11px 14px; color: var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 18px; }
+      .boss-chipd[data-tone="warn"] { color: var(--dsw-alias-state-warn-primary); border-color: var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-2); font-weight: 600; }
+      .boss-chipd[data-tone="ok"] { color: var(--dsw-alias-state-success-primary); border-color: var(--dsw-alias-state-success-primary); background: var(--dsw-alias-bg-layer-2); }
+      /* 不再用 opacity 弱化：叠在浅色底上只剩 2.3:1，过期面试会被当成待办（a11y 评审 #7）。 */
+.boss-chipd[data-tone="past"], .boss-chipd[data-tone="tbd"] { border-style: dashed; color: var(--dsw-alias-label-secondary); }
+      .boss-date-warning { display: block; margin-top: 2px; color: var(--dsw-alias-state-warn-primary); font-size: 12px; line-height: 18px; font-weight: 600; }
+      .boss-conflict-banner { border: 1px solid var(--dsw-alias-state-warn-primary); border-left-width: 3px; border-radius: 10px; padding: 11px 14px; color: var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 18px; }
       .boss-conflict-banner strong { display: block; margin-bottom: 3px; font-size: 12.5px; }
       .boss-conflict-row { color: var(--dsw-alias-label-primary); }
       .boss-audit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 9px 12px; background: var(--dsw-alias-bg-layer-1); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11.5px; line-height: 18px; }
       .boss-audit-title { font-weight: 600; margin-right: 2px; }
       .boss-audit-note { color: var(--dsw-alias-label-secondary); }
-      .boss-track { display: inline-block; margin-top: 4px; padding: 0 6px; border-radius: 8px; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 10.5px; line-height: 16px; }
+      .boss-track { display: inline-block; margin-top: 4px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 11.5px; line-height: 17px; }
       .boss-error { border: 1px solid var(--dsw-alias-state-error-primary); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--dsw-alias-state-error-primary); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .boss-days { display: flex; gap: 4px; flex-wrap: wrap; }
       .boss-day { border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 2px 8px; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
@@ -870,7 +871,7 @@ function createUiKit(React) {
       .boss-aq-badge { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 
       /* 待审批条 + 最近发送：一个容器、每行两栏（依据 / 动作），不用表格以免和「等你回复」看串 */
-      .boss-section-hint { margin: 2px 0 8px; font-size: 12px; color: var(--dsw-alias-label-tertiary); }
+      .boss-section-hint { margin: 2px 0 8px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
       .boss-aq-list { display: flex; flex-direction: column; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
       .boss-aq-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l4); }
       .boss-aq-item:last-child { border-bottom: 0; }
@@ -882,9 +883,9 @@ function createUiKit(React) {
       .boss-aq-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
       .boss-aq-co { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); }
       .boss-aq-job { font-size: 13px; color: var(--dsw-alias-label-secondary); }
-      .boss-aq-meta { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
-      .boss-aq-state { font-size: 12px; color: var(--dsw-alias-label-tertiary); }
-      .boss-aq-draft { font-size: 12px; color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+      .boss-aq-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-aq-state { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-aq-draft { font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
       .boss-aq-acts { display: flex; align-items: center; gap: 6px; flex: none; }
       .boss-aq-log .boss-aq-item { padding: 8px 12px; }
       .boss-ap-notice { color: var(--dsw-alias-brand-primary); }
@@ -895,7 +896,9 @@ function createUiKit(React) {
       .boss-ap-draft-block { margin-top: 10px; }
       .boss-ap-draft { font-size: 12.5px; line-height: 20px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; word-break: break-word; }
       .boss-ap-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .boss-ap-jd { margin: 0; font-size: 12px; line-height: 19px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
+      .boss-ap-jd-p { margin: 0 0 8px; }
+      .boss-ap-jd-p:last-child { margin-bottom: 0; }
+      .boss-ap-jd { margin: 0; font-size: 13.5px; line-height: 21px; tab-size: 4; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
       .boss-ap-link { font-size: 12px; color: var(--dsw-alias-brand-primary); text-decoration: none; }
 
       /* —— 今天：一行数字 + 等我回 + 待发 + 已发折叠 —— */
@@ -955,10 +958,12 @@ function createUiKit(React) {
       .boss-upcoming-main { min-width: 0; }
     `
 
-    // 可点击行统一走这里：role/tabIndex/Enter+Space，别只给鼠标用户用。
+    // 可点击行统一走这里：Tab 可达 + Enter/Space + 动作词明确的 label，别只给鼠标用户用。
+    // 用 role=group 而不是 button：行里本来就有真按钮（「去回」「发送」），
+    // button 套 button 会让 VoiceOver 把内层念成外层的子项（a11y 评审 #18）。
     const clickProps = (onActivate, label) => ({
       'data-clickable': 'true',
-      role: 'button',
+      role: 'group',
       tabIndex: 0,
       'aria-label': label,
       onClick: onActivate,
@@ -1117,7 +1122,7 @@ function createUiKit(React) {
         'div',
         {
           className: 'boss-tr threads',
-          ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''}`),
+          ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''} 打开详情`),
         },
         h(
           'span',
@@ -1140,7 +1145,18 @@ function createUiKit(React) {
                 { className: 'boss-sub', style: { color: 'inherit', fontSize: '12px' }, title: item.job },
                 item.job,
                 item.salary ? h('span', { className: 'boss-sal' }, item.salary) : null,
-                item.track ? h('span', { className: 'boss-track', title: item.track.evidence }, item.track.label) : null,
+                item.track
+                  ? h(
+                      'span',
+                      {
+                        className: 'boss-track',
+                        tabIndex: 0,
+                        title: item.track.evidence,
+                        'aria-label': `${item.track.label}：${item.track.evidence || ''}`,
+                      },
+                      item.track.label,
+                    )
+                  : null,
               )
             : h('span', { className: 'boss-sub' }, t('jobHint')),
         ),
@@ -1165,8 +1181,7 @@ function createUiKit(React) {
         'div',
         {
           className: 'boss-tr iv',
-          'data-clickable': onOpen ? 'true' : undefined,
-          onClick: onOpen ? () => onOpen(item.company) : undefined,
+          ...(onOpen ? clickProps(() => onOpen(item.company), `${item.company} ${item.job || ''} 打开详情`) : {}),
         },
         h('span', null, h('div', { className: 'boss-co' }, item.company), h('span', { className: 'boss-chipd', 'data-tone': chip.tone }, chip.text)),
         h('span', { className: 'boss-sub' }, item.who || '—'),
@@ -1192,7 +1207,7 @@ function createUiKit(React) {
         : ''
       return h(
         'div',
-        { className: 'boss-audit', 'aria-label': t('agentGuard') },
+        { className: 'boss-audit', role: 'group', 'aria-label': t('agentGuard') },
         h('span', { className: 'boss-audit-title' }, t('agentGuard')),
         h(
           'span',
@@ -1286,7 +1301,7 @@ function createUiKit(React) {
             {
               key: `${item.company}|${item.who}`,
               className: 'boss-action-row',
-              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''}`),
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''} 打开详情`),
             },
             h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state),
             h(
@@ -1484,7 +1499,7 @@ function createUiKit(React) {
                 key: item.id,
                 className: 'boss-aq-item',
                 'data-status': item.status,
-                ...clickProps(() => onOpen(item.id), `${item.company} ${item.jobTitle || ''}`),
+                ...clickProps(() => onOpen(item.id), `${item.company} ${item.jobTitle || ''} 打开审批详情`),
               },
               h(
                 'div',
@@ -1518,6 +1533,14 @@ function createUiKit(React) {
       )
     }
 
+    /** JD 按空行切段，读屏能一段段跳，低视力用户不会被一整块 12px 长文砸（a11y 评审 #11）。 */
+    function jdParagraphs(text) {
+      return String(text || '')
+        .split(/\n\s*\n+/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+    }
+
     /** 最近发送：把已发/失败/跳过摊开，解决「发出去的看不到去向」。 */
     /**
      * 「等我回」：只放球在我这边的会话（对方最后一句、状态是待回复/待你决定）。
@@ -1537,7 +1560,7 @@ function createUiKit(React) {
             {
               key,
               className: 'boss-wait-row',
-              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''}`),
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''} 打开详情`),
             },
             h(
               'div',
@@ -1634,7 +1657,7 @@ function createUiKit(React) {
               key: item.id,
               className: 'boss-aq-item',
               'data-status': item.status,
-              ...clickProps(() => onOpen?.(item.id), `${item.company} ${item.jobTitle || ''}`),
+              ...clickProps(() => onOpen?.(item.id), `${item.company} ${item.jobTitle || ''} 打开审批详情`),
             },
             h(
               'div',
@@ -1793,7 +1816,12 @@ function createUiKit(React) {
               msgs.length
                 ? h(
                     'div',
-                    { className: 'boss-chat' },
+                    {
+                      className: 'boss-chat',
+                      role: 'region',
+                      tabIndex: 0,
+                      'aria-label': `${t('approvalChat')}（${msgs.length}）`,
+                    },
                     msgs.map((entry, index) =>
                       h(
                         'div',
@@ -1810,7 +1838,18 @@ function createUiKit(React) {
                   ),
               h(UI.SectionTitle, { style: { marginTop: 14 } }, t('approvalJd')),
               data.jdText
-                ? h('pre', { className: 'boss-ap-jd' }, data.jdText)
+                ? h(
+                    'div',
+                    {
+                      className: 'boss-ap-jd',
+                      role: 'region',
+                      tabIndex: 0,
+                      'aria-label': t('approvalJd'),
+                    },
+                    jdParagraphs(data.jdText).map((para, index) =>
+                      h('p', { key: index, className: 'boss-ap-jd-p' }, para),
+                    ),
+                  )
                 : h('div', { className: 'boss-sub' }, t('approvalNoJd')),
               data.jdUrl
                 ? h(
@@ -1842,7 +1881,7 @@ function createUiKit(React) {
             {
               key: `${item.company}|${index}`,
               className: 'boss-upcoming-row',
-              ...clickProps(() => onOpen(item.company), `${item.company} ${item.when || ''}`),
+              ...clickProps(() => onOpen(item.company), `${item.company} ${item.when || ''} 打开详情`),
             },
             h('span', { className: 'boss-chipd', 'data-tone': chip.tone }, chip.text),
             h(
@@ -2082,7 +2121,7 @@ function createUiKit(React) {
           !loading && data && tab === 'today'
             ? h(
                 'div',
-                { className: 'boss-today' },
+                { className: 'boss-today', role: 'tabpanel', 'aria-label': t('tabToday') },
                 h(
                   'div',
                   { className: 'boss-kpi' },
@@ -2145,8 +2184,8 @@ function createUiKit(React) {
           // —— 会话列表 ——
           !loading && data && tab === 'threads'
             ? h(
-                React.Fragment,
-                null,
+                'div',
+                { role: 'tabpanel', 'aria-label': t('tabAll') },
                 h(
                   'div',
                   { className: 'boss-section' },
@@ -2165,6 +2204,7 @@ function createUiKit(React) {
                     value: query,
                     onChange: setQuery,
                     placeholder: t('search'),
+                    'aria-label': t('search'),
                   }),
                   h(
                     UI.Pill,
