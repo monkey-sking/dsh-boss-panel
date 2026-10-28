@@ -431,13 +431,19 @@ function createUiKit(React) {
       waitEmpty: '现在没有等你回的消息',
       goReply: '去回',
       sentTitle: '发出去了，等回复',
-      sentLine: '{n} 条 · 最后 {time}',
+      sentLine: '已发出 {n} 条 · 待回 {wait} · 最后 {time}',
       daysAgo: '{n} 天前',
       tierUnknown: '未评级',
       allLink: '全部 {n} 条会话 →',
       tabInterview: '面试',
       tabThreads: '会话',
       stateDist: '状态分布',
+      recentDaysTitle: '近 14 天首触',
+      recentDaysSub: '按本地日历日去重，已发首触（含面板审批发出的），单位：家/天',
+      interviewTbd: '另有 {n} 条待定（日期未定）',
+      interviewClosed: '已取消 {a} · 已完成 {b}',
+      interviewNone: '近期没有面试',
+      threadsCount: '{rows} 条会话 / {companies} 家',
       actionTitle: '需要行动',
       actionSub: '要你拍板的事',
       actionEmpty: '当前没有需要立即处理的事',
@@ -579,7 +585,7 @@ function createUiKit(React) {
       waitEmpty: 'Nothing waiting on you right now',
       goReply: 'Reply',
       sentTitle: 'Sent, awaiting reply',
-      sentLine: '{n} threads · last {time}',
+      sentLine: '{n} sent · {wait} waiting · last {time}',
       daysAgo: '{n} days ago',
       tierUnknown: 'Unrated',
       allLink: 'All {n} threads →',
@@ -1603,10 +1609,10 @@ function createUiKit(React) {
      */
     function SentSummary({ approvals, t, onOpen }) {
       const [expanded, setExpanded] = React.useState(false)
-      const items = (approvals?.items ?? []).filter(
-        (item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped',
-      )
+      // 只算真发出去的：skipped 是「不发」，把它算进「等回复」会让用户以为球在对方手上（审计 #4）。
+      const items = (approvals?.items ?? []).filter((item) => item.status === 'sent')
       if (!items.length) return null
+      const waiting = items.filter((item) => item.threadState === '等对方').length
       const sorted = [...items].sort((a, b) =>
         String(b.sentAt || b.decidedAt || '').localeCompare(String(a.sentAt || a.decidedAt || '')),
       )
@@ -1622,7 +1628,11 @@ function createUiKit(React) {
             ...clickProps(() => setExpanded((v) => !v), t('sentTitle')),
           },
           h('span', { className: 'boss-sent-title' }, t('sentTitle')),
-          h('span', { className: 'boss-sent-meta' }, t('sentLine', { n: items.length, time: last })),
+          h(
+            'span',
+            { className: 'boss-sent-meta' },
+            t('sentLine', { n: items.length, wait: waiting, time: last }),
+          ),
           h('span', { className: 'boss-sent-toggle' }, expanded ? '▾' : '▸'),
         ),
         expanded ? h(SentLog, { approvals, t, onOpen }) : null,
@@ -1634,12 +1644,16 @@ function createUiKit(React) {
       const r = item?.sendResult
       if (!r) return ''
       if (typeof r === 'string') return r
-      return [r.status, r.at, r.tail, r.detail, r.fit].filter((x) => typeof x === 'string' && x).join(' · ')
+      const parts = [r.status, r.at, r.tail, r.detail, r.fit].filter((x) => typeof x === 'string' && x)
+      // sent 但 tail 为空 = 发出去了但没拿到送达回执，别装作送达了（审计 #6）。
+      if (item?.status === 'sent' && !r.tail) parts.push('送达未复核')
+      return parts.join(' · ')
     }
 
     function SentLog({ approvals, t, onOpen }) {
       const items = (approvals?.items ?? [])
-        .filter((item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped')
+        // 失败的要留（用户要看到哪条没发出去），「跳过」的留着只会冒充已发。
+        .filter((item) => item.status === 'sent' || item.status === 'failed')
         .sort((a, b) =>
           String(b.sentAt || b.decidedAt || '').localeCompare(String(a.sentAt || a.decidedAt || '')),
         )
@@ -1985,14 +1999,14 @@ function createUiKit(React) {
       )
 
       // 「今天」只算真正会出现在首屏的三件事：今天发出、等我回、面试。
-      const todayKey = new Date().toLocaleDateString('sv-SE')
-      const sentToday = (data?.approvals?.items ?? []).filter(
-        (item) => item.status === 'sent' && String(item.sentAt ?? '').slice(0, 10) === todayKey,
-      ).length
+      // 口径与宿主对齐：本地日 + approvals ∪ contacted 去重，别在前端再自算一个「今天」。
+      const sentToday = data?.daily?.todayOutreach ?? 0
       // 球在我这边 = 对方最后一句 + 状态是待回复/待你决定。之前只看「待你决定」，
       // 结果 4 条真正在等他回的消息一条都不显示（用户原话「那些等着回复的呢？？？」）。
       const waitRows = (data?.threads ?? [])
         .filter((item) => item.lastFrom === '对方' && (item.state === '待回复' || item.state === '待你决定'))
+        // BOSS 的「您正在与Boss某某沟通」是系统占位符，不是对方在问我（审计 #5）。
+        .filter((item) => !/^您正在与Boss/.test(String(item.last ?? '').trim()))
         .sort((a, b) => (b.days ?? -1) - (a.days ?? -1))
 
       const interviews = data?.interviews ?? []
@@ -2160,14 +2174,33 @@ function createUiKit(React) {
 
                 h(SentSummary, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
 
-                interviews.length
-                  ? h(
-                      'div',
-                      { className: 'boss-section' },
-                      h(UI.SectionTitle, null, t('upcoming')),
-                      h(UpcomingList, { interviews, t, onOpen: open }),
-                    )
-                  : null,
+                (() => {
+                  const stats = data?.interviewStats ?? {}
+                  const tbd = stats.tbd ?? 0
+                  const closedA = stats.cancelled ?? 0
+                  const closedB = stats.past ?? 0
+                  if (!interviews.length && !tbd && !closedA && !closedB) return null
+                  return h(
+                    'div',
+                    { className: 'boss-section' },
+                    h(UI.SectionTitle, null, `${t('upcoming')}（${interviews.length}）`),
+                    interviews.length
+                      ? h(UpcomingList, { interviews, t, onOpen: open })
+                      : h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('interviewNone'))),
+                    tbd || closedA || closedB
+                      ? h(
+                          'div',
+                          { className: 'boss-section-hint' },
+                          [
+                            tbd ? t('interviewTbd', { n: tbd }) : '',
+                            closedA || closedB ? t('interviewClosed', { a: closedA, b: closedB }) : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · '),
+                        )
+                      : null,
+                  )
+                })(),
 
                 h(
                   'div',
@@ -2175,7 +2208,7 @@ function createUiKit(React) {
                   h(
                     UI.Button,
                     { variant: 'ghost', size: 'sm', onClick: () => setTab('threads') },
-                    t('allLink', { n: counts.threads ?? 0 }),
+                    t('allLink', { n: counts.companies ?? counts.threads ?? 0 }),
                   ),
                 ),
               )
@@ -2193,7 +2226,10 @@ function createUiKit(React) {
                   h(
                     'span',
                     { className: 'boss-section-count' },
-                    `${threads.length} / ${counts.threads ?? 0}`,
+                    t('threadsCount', {
+                      rows: counts.threadRows ?? threads.length,
+                      companies: counts.companies ?? '—',
+                    }),
                   ),
                   h('div', { className: 'boss-section-hint' }, t('threadsHint')),
                 ),
@@ -2231,6 +2267,8 @@ function createUiKit(React) {
                 ),
                 h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('stateDist'))),
                 h(StateBar, { byState, t }),
+                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('recentDaysTitle'))),
+                h('div', { className: 'boss-section-hint' }, t('recentDaysSub')),
                 h(
                   'div',
                   { className: 'boss-days', style: { marginTop: 10, marginBottom: 12 } },

@@ -616,6 +616,7 @@ export async function buildSnapshot(options = {}) {
     blacklistDoc,
     pendingDoc,
     approvalsDoc,
+    apptDoc,
     handledDoc,
     resumeVersionsDoc,
     factGateInstalled,
@@ -631,6 +632,7 @@ export async function buildSnapshot(options = {}) {
       readCached(files.blacklist, {}),
       readCached(files.pending, { items: [] }),
       readCached(files.approvals, { items: [] }),
+      readCached(path.join(dataDir, 'appointments.json'), { items: [] }),
       readCached(files.handled, {}),
       readCached(files.resumeVersions, { resumes: {} }),
       fs.stat(files.factGate).then(() => true).catch(() => false),
@@ -648,6 +650,7 @@ export async function buildSnapshot(options = {}) {
     blacklistDoc.mtime,
     pendingDoc.mtime,
     approvalsDoc.mtime,
+    apptDoc.mtime,
     handledDoc.mtime,
     resumeVersionsDoc.mtime,
   ].join('-')
@@ -671,7 +674,6 @@ export async function buildSnapshot(options = {}) {
   // 这里把 appointments.json 里已明确约好时间、且没取消/没面完的电话/线上沟通补进 ivm，
   // 走与线下约面完全相同的「已约面试」分类，不另开状态，避免两边口径再分叉。
   // 唯一的权威实现；离线看板侧（_appt_items）已于 2026-10-27 停用。
-  const apptDoc = await readCached(path.join(dataDir, 'appointments.json'), { items: [] })
   const apptItems = Array.isArray(apptDoc.value?.items) ? apptDoc.value.items : []
   for (const item of apptItems) {
     if (!item || typeof item !== 'object') continue
@@ -913,7 +915,13 @@ export async function buildSnapshot(options = {}) {
   // --- 逐行产出 -----------------------------------------------------------
   const byState = Object.fromEntries(ORDER.map((state) => [state, 0]))
   const threads = []
+  const skippedRows = { noCompany: 0 }
   for (const row of rows) {
+    // 公司名为空的行点开是空弹窗，也不该计入「沟通对象」（审计 #7）。
+    if (!String(row.company ?? '').trim()) {
+      skippedRows.noCompany += 1
+      continue
+    }
     const state = classify(row)
     const days = daysSince(row.time, today)
     byState[state] = (byState[state] ?? 0) + 1
@@ -956,7 +964,6 @@ export async function buildSnapshot(options = {}) {
   // SENTONLY: contacted.json 里也有「首触未成功」的记录（点击了但没建立会话）。
   // 那些不是送达，不能计入今日首触，否则数字看着涨了、会话列表却没有任何新行。
   const ab = { A: 0, B: 0 }
-  let todayOutreach = 0
   const failedCompanies = []
   for (const item of contacts) {
     if (String(item.date).slice(0, 10) !== todayKey) continue
@@ -964,11 +971,10 @@ export async function buildSnapshot(options = {}) {
       if (item.company) failedCompanies.push(item.company)
       continue
     }
-    todayOutreach += 1
     if (item.tag === 'A') ab.A += 1
     else if (item.tag === 'B') ab.B += 1
   }
-  const todayFailed = failedCompanies.length
+  let todayFailed = failedCompanies.length
 
   // --- 面试日程 -----------------------------------------------------------
   const allInterviews = interviewsRaw
@@ -987,33 +993,55 @@ export async function buildSnapshot(options = {}) {
     }))
     .sort((a, b) => (a.dayDiff ?? 9999) - (b.dayDiff ?? 9999))
 
-  const interviews = allInterviews.filter((item) => item.dayDiff !== null && item.dayDiff >= 0)
-  const pastInterviews = allInterviews.filter((item) => item.dayDiff !== null && item.dayDiff < 0)
+  // 面试口径（2026-10-28 数据审计 #1）：原来只留 dayDiff>=0，把 4/6 条日程直接吞掉——
+  // 其中一条（待对方给时间）仍然活着，用户却看到「面试 0」，误以为这条线没进展。
+  // 现在拆成四桶，KPI 只算「有明确日期且未取消」，其余在空态里如实交代。
+  const isCancelled = (item) => /已取消|取消/.test(item.state || '')
+  const interviews = allInterviews.filter(
+    (item) => item.dayDiff !== null && item.dayDiff >= 0 && !isCancelled(item),
+  )
+  const pastInterviews = allInterviews.filter(
+    (item) => item.dayDiff !== null && item.dayDiff < 0 && !isCancelled(item),
+  )
+  const tbdInterviews = allInterviews.filter((item) => item.dayDiff === null && !isCancelled(item))
+  const cancelledInterviews = allInterviews.filter(isCancelled)
   const lastPast = pastInterviews.length ? pastInterviews[pastInterviews.length - 1] : null
 
   // --- 最近 14 天首触 -----------------------------------------------------
-  // 只统计真正送达的首触；「首触未成功(未建立会话)」不计入，否则趋势图虚高。
-  const byDate = new Map()
-  for (const item of contacts) {
-    const key = String(item.date).slice(0, 10)
-    if (!key) continue
-    if (SEND_FAILED.test(item.status)) continue
-    byDate.set(key, (byDate.get(key) ?? 0) + 1)
+  // 首触的唯一口径 = contacted(送达) ∪ approvals(sent)，按「本地日 + 公司」去重。
+  // 原来只读 contacted，审批链发的 11 条进不了趋势条 → KPI 说今天 11、趋势最新是昨天，
+  // 同一件事三个数（2026-10-28 数据审计 #3）。这里统一，daily 与 recentDays 同源。
+  const touchDays = new Map() // dateKey -> Set(company)
+  const addTouch = (dateKey, company) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return // 剔掉 "undefined" 这类脏桶（#10）
+    const key = dateKey
+    if (!touchDays.has(key)) touchDays.set(key, new Set())
+    touchDays.get(key).add(company || key)
   }
-  const recentDays = [...byDate.entries()]
+  for (const item of contacts) {
+    if (SEND_FAILED.test(item.status)) continue
+    addTouch(String(item.date ?? '').slice(0, 10), item.company)
+  }
+  for (const item of approvalsDoc.value?.items ?? []) {
+    if (item.status !== 'sent' || !item.sentAt) continue
+    const when = new Date(item.sentAt)
+    if (Number.isNaN(when.getTime())) continue
+    addTouch(localDateKey(when), item.company)
+  }
+  const recentDays = [...touchDays.entries()]
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .slice(0, 14)
-    .map(([date, count]) => ({ date, count }))
+    .map(([date, set]) => ({ date, count: set.size }))
 
   // --- 今日简报 -----------------------------------------------------------
   const decideRows = threads.filter((item) => item.state === '待你决定')
   const daily = {
     decide: decideRows.length,
     decideCompanies: decideRows.slice(0, 4).map((item) => item.company),
-    // 已读不回桶 2026-10-27 删除，保持字段存在但恒为 0（外部读取方不必改）。
-    readNoReply: 0,
+    // 已读不回桶 2026-10-27 删除。不用 0 表示「没做」——0 会被外部脚本当真实业务值（审计 #9）。
+    readNoReply: null,
     todayThreads: threads.filter((item) => item.days === 0).length,
-    todayOutreach,
+    todayOutreach: 0, // 下面按 approvals ∪ contacted 的本地日去重口径回填
     todayFailed,
     failedCompanies: failedCompanies.slice(0, 6),
     a: ab.A,
@@ -1024,17 +1052,20 @@ export async function buildSnapshot(options = {}) {
   const approvals = buildApprovals(approvalsDoc.value, threads)
 
   // 审批链（boss_approval_runner）发送后只写 boss_approvals.json，不写 contacted.json，
-  // 简报不能只看 contacted。两边取大可避免「今天已发 0 条」压着 11 条已发明的自相矛盾。
-  {
-    const todayKey = new Date().toLocaleDateString('sv-SE')
-    const sentToday = approvals.items.filter(
-      (item) => item.status === 'sent' && String(item.sentAt ?? '').slice(0, 10) === todayKey,
-    )
-    if (sentToday.length > daily.todayOutreach) {
-      daily.todayOutreach = sentToday.length
-      daily.todayFailed = sentToday.filter((item) => item.sendResult && item.sendResult.ok === false).length
-    }
-  }
+  // 简报不能只看 contacted。todayOutreach 直接取上面统一口径的 union（本地日去重）。
+  daily.todayOutreach = touchDays.get(todayKey)?.size ?? 0
+  // sendResult 里从来没有 ok 字段，`ok === false` 恒假 → 「未送达」永远是假的 0（审计 #6）。
+  // 以 status 判定：只有 sent/already 算发出成功。
+  daily.todayFailed = Math.max(
+    daily.todayFailed,
+    approvals.items.filter((item) => {
+      if (!item.sendResult || !item.sentAt) return false
+      const when = new Date(item.sentAt)
+      if (Number.isNaN(when.getTime()) || localDateKey(when) !== todayKey) return false
+      const st = String(item.sendResult.status ?? '')
+      return st !== 'sent' && st !== 'already'
+    }).length,
+  )
   const agentAudit = buildAgentAudit({
     threads,
     interviews: allInterviews,
@@ -1044,12 +1075,18 @@ export async function buildSnapshot(options = {}) {
   })
 
   const counts = {
-    threads: threads.length,
+    // 行数 ≠ 公司数：810 行里有同公司多行（海马云 3 行），面板别把行数当沟通对象数（审计 #7）。
+    threads: rows.length,
+    threadRows: rows.length,
+    companies: new Set(threads.map((item) => item.company)).size,
     pending: pending.length,
     byState,
     interviews: interviews.length,
+    tbdInterviews: tbdInterviews.length,
+    cancelledInterviews: cancelledInterviews.length,
+    pastInterviews: pastInterviews.length,
     contacts: contacts.length,
-    todayOutreach,
+    todayOutreach: daily.todayOutreach,
     ab,
   }
 
@@ -1063,6 +1100,14 @@ export async function buildSnapshot(options = {}) {
     filters: ORDER.map((state) => ({ state, count: byState[state] ?? 0 })),
     threads,
     interviews,
+    interviewStats: {
+      upcoming: interviews.length,
+      tbd: tbdInterviews.length,
+      cancelled: cancelledInterviews.length,
+      past: pastInterviews.length,
+      total: allInterviews.length,
+    },
+    tbdInterviews,
     interviewEmptyTail: lastPast
       ? `最近一次「${lastPast.company}｜${lastPast.job}｜${lastPast.state}」已结束（${
           lastPast.next || '已收尾'
