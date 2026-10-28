@@ -137,6 +137,9 @@ plugin_manager install_bundle target=<你的插件目录>/dsh-boss-panel
 
 ## 测试
 
+一次跑完：`node test/all.mjs`（或 `npm test`）。缺测试文件、任一失败都会非 0 退出。
+
+
 ```
 node test/render_test.mjs     # 有状态渲染测试：驱动 今天/全部会话 两个 Tab 切换，16 项断言
 node test/approval_test.mjs   # 审批流：合成快照 3 条 → 概览队列行、点行开弹窗、点通过真的 POST approval_decide
