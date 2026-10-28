@@ -511,6 +511,9 @@ function createUiKit(React) {
       approvalsCorrupt: '待发清单暂时读不出来（可能正在写入）—— 下面的列表不是最新状态，稍等会自动恢复',
       runnerStale: '后台发送器已经 {n} 分钟没动静了 —— 面板上点「发出」不会真的发出去，检查 dsh 的 boss-approval-send 任务',
       blockedNotice: '有 {n} 条没发出去：授权过期或草稿在批准后改过 —— 在下面重新点一次「发送」',
+      repeat7: '{n} 天前投过',
+      repeat30: '{n} 天前投过',
+      repeatHint: '同一家 7 天内重发首触不加曝光，还会把第二条压在同一条未读下面',
       hardGateChip: 'JD 硬门槛',
       approvalStuck: '有 {n} 条已排上、超过 20 分钟没发出 —— 后台发送任务可能停了（boss-approval-send）',
       chatOlder: '上面还有 {n} 条更早的聊天，这里只显示最近 30 条',
@@ -683,6 +686,9 @@ function createUiKit(React) {
       approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
       runnerStale: 'The background sender has been idle for {n} min — approving here will not send; check the boss-approval-send task',
       blockedNotice: '{n} item(s) were not sent: the approval expired or the draft changed after approving — click 发送 again below',
+      repeat7: 'contacted {n}d ago',
+      repeat30: 'contacted {n}d ago',
+      repeatHint: 'Re-sending within 7 days adds no exposure and stacks under the same unread thread',
       hardGateChip: 'JD hard gate',
       approvalStuck: '{n} approved over 20 minutes ago but not sent — the background sender may be down',
       chatOlder: '{n} earlier messages are hidden — showing the latest 30',
@@ -1497,6 +1503,17 @@ function createUiKit(React) {
                   // JD 里有「必须有卡牌实战」这类一票否决时，在点之前就摆出来。
                   item.hardGate
                     ? h('span', { className: 'boss-aq-gate', title: item.hardGate }, t('hardGateChip'))
+                    : null,
+                  // 这家最近投过没有：同一家重发首触不加曝光，还会把第二条压在同一条未读下面。
+                  item.contactedDays != null && item.contactedDays <= 30
+                    ? h(
+                        UI.Tag,
+                        {
+                          tone: item.contactedDays <= 7 ? 'warning' : 'outline',
+                          title: t('repeatHint'),
+                        },
+                        t(item.contactedDays <= 7 ? 'repeat7' : 'repeat30', { n: item.contactedDays }),
+                      )
                     : null,
                 ),
                 item.hardGate

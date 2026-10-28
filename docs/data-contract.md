@@ -128,3 +128,9 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py lint
 | 发送失败后想重试 | 面板只有「收回」，后端不允许 `failed → pending`，点了必报错 | 面板与 CLI 都允许 `failed → pending`（`sent` 仍不可回退） |
 | 文案改过但指纹没重算 | 体检全绿，点发送才被拦 | `audit` 比对 `draftHash` 与文案、`approvedDraftHash` 与当前文案，不一致算 BLOCK |
 | 结果行缺 `at` | 用结算时刻冒充发送时刻，整批同一秒 | 写 `sentAtSource: "settle_fallback"`，不再假装是真实发送时间 |
+
+## 8. 重复投递可见（2026-10-29）
+
+面板在候选行显示「N 天前投过」（`item.contactedDays`，来源 `contacted.json` 里该公司的最近一次
+`date`）。≤7 天是 warning 色并附说明：同一家 7 天内重发首触不加曝光，还会把第二条压在同一条
+未读下面。这只是提示，不阻止发送——是否值得再发由人判断。

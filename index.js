@@ -1132,7 +1132,7 @@ export async function buildSnapshot(options = {}) {
   }
 
   const pending = normalizePending(pendingDoc.value)
-  const approvals = buildApprovals(approvalsDoc.value, threads)
+  const approvals = buildApprovals(approvalsDoc.value, threads, contactRows)
 
   // 审批链（boss_approval_runner）发送后只写 boss_approvals.json，不写 contacted.json，
   // 简报不能只看 contacted。todayOutreach 直接取上面统一口径的 union（本地日去重）。
@@ -1330,7 +1330,20 @@ function normalizeApproval(item) {
   }
 }
 
-function buildApprovals(doc, threadRows = []) {
+function buildApprovals(doc, threadRows = [], contactRows = []) {
+  // 30 天内投过的公司：招聘方评审里最贵的一条教训是「同一家重发首触不加曝光」，
+  // 但面板此前完全看不出这家上周刚投过。
+  const lastContact = new Map()
+  const todayMs = Date.parse(new Date().toISOString().slice(0, 10))
+  for (const row of contactRows) {
+    const company = String(row?.company || '').trim()
+    const day = String(row?.date || '').slice(0, 10)
+    if (!company || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue
+    const days = Math.floor((todayMs - Date.parse(day)) / 86400000)
+    if (!Number.isFinite(days) || days < 0) continue
+    const prev = lastContact.get(company)
+    if (prev == null || days < prev) lastContact.set(company, days)
+  }
   const items = Array.isArray(doc?.items) ? doc.items : []
   // 审批条目常常没记对接人（列表接口只给 bossName，首触时还没建会话）。
   // 会话表里已经有这条线程时，用它的对接人/最近一句补上，省得弹窗里「对接人 —」。
@@ -1360,6 +1373,7 @@ function buildApprovals(doc, threadRows = []) {
       const delivery = String(row.delivery || '')
       item.readState = delivery.includes('已读') ? 'read' : delivery.includes('送达') ? 'delivered' : ''
     }
+    item.contactedDays = lastContact.has(item.company) ? lastContact.get(item.company) : null
     // 资料齐全度：面板不能再出现「有的有公司/JD/聊天，有的缺一块」而看不出为什么。
     // 每个字段只有两种状态 ——「采集到了」或「标记为未采集」，不留空白让人猜。
     item.coverage = {
