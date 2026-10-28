@@ -464,6 +464,7 @@ function createUiKit(React) {
       approvalSummary: '待批 {pending} · 已通过待发 {approved} · 已发 {sent} · 跳过 {skipped}',
       approvalApprove: '发送',
       approvalSendHint: '10 分钟内后台发出；发出后不能撤回',
+      approvalFactBlocked: '上次被事实闸门拦下，文案已改写',
       approvalSkip: '跳过',
       approvalRevoke: '撤回',
       approvalApproved: '已通过，agent 发送时会回写结果',
@@ -611,6 +612,7 @@ function createUiKit(React) {
       approvalSummary: 'Waiting {pending} · Approved {approved} · Sent {sent} · Skipped {skipped}',
       approvalApprove: 'Send',
       approvalSendHint: 'Sent in background within 10 min; cannot be undone',
+      approvalFactBlocked: 'Blocked by fact gate last time; draft rewritten',
       approvalSkip: 'Skip',
       approvalRevoke: 'Undo',
       approvalApproved: 'Approved; the agent writes back the result',
@@ -1488,7 +1490,9 @@ function createUiKit(React) {
                       ),
                   h('span', { className: 'boss-aq-co', title: item.company }, item.company || '—'),
                   h('span', { className: 'boss-aq-job' }, item.jobTitle || ''),
-                  h('span', { className: 'boss-aq-meta' }, [item.salary, item.city].filter(Boolean).join(' · ')),
+                  item.status === 'pending' && item.sendResult?.status === 'fact_blocked'
+                    ? h(UI.Tag, { tone: 'warning' }, t('approvalFactBlocked'))
+                    : h('span', { className: 'boss-aq-meta' }, [item.salary, item.city].filter(Boolean).join(' · ')),
                   item.threadState
                     ? h('span', { className: 'boss-aq-state' }, `${item.threadState}${item.threadTime ? ' · ' + item.threadTime : ''}`)
                     : null,
