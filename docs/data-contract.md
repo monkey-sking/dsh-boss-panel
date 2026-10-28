@@ -134,3 +134,11 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py lint
 面板在候选行显示「N 天前投过」（`item.contactedDays`，来源 `contacted.json` 里该公司的最近一次
 `date`）。≤7 天是 warning 色并附说明：同一家 7 天内重发首触不加曝光，还会把第二条压在同一条
 未读下面。这只是提示，不阻止发送——是否值得再发由人判断。
+
+## 9. 数据新鲜度（2026-10-29）
+
+快照带 `dataQuality.dataAgeMin`（当前时间 − `boss_threads.json` 的 `ts`，分钟）。超过 90 分钟，
+面板顶部直接显示「数据已经 N 小时没更新 —— 后台采集可能没在跑，下面的数字不是今天的」。
+
+起因：2026-10-28 用户看到「今天发出 0 / 全部 810 条会话」，实际是没重启的旧宿主 + 旧数据。
+面板可以旧，但不能假装新。

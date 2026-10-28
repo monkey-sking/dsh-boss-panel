@@ -42,6 +42,18 @@ try {
   await rm(broken, { recursive: true, force: true })
 }
 
+// 回归：数据太旧要能被界面识别（用户 2026-10-28 看到的「今天 0 条」就是旧数据冒充今天）。
+const staleData = await mkdtemp(path.join(tmpdir(), 'boss-snap-stale-'))
+try {
+  const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+  await writeFile(path.join(staleData, 'boss_threads.json'), JSON.stringify({ ts: threeHoursAgo, rows: [] }), 'utf-8')
+  const s = await buildSnapshot({ dataDir: staleData })
+  assert.ok(s.dataQuality.dataAgeMin >= 170, 'dataAgeMin should reflect a 3h-old snapshot')
+  console.log('SNAP OK (stale data flagged):', s.dataQuality.dataAgeMin, 'min')
+} finally {
+  await rm(staleData, { recursive: true, force: true })
+}
+
 // 回归：「N 天前投过」必须按本地日算。contacted.json 的 date 是本地日期，
 // 早年用 toISOString().slice(0,10) 当今天，东八区 00:00–08:00 会整体差一天（2026-10-29 实测）。
 const contactAge = await mkdtemp(path.join(tmpdir(), 'boss-snap-contact-'))

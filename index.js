@@ -1230,10 +1230,18 @@ export async function buildSnapshot(options = {}) {
     /* 没有审计文件就是没跑过，不算异常 */
   }
 
+  // 数据有多旧：快照的 ts 是采集侧写盘时间。面板不能拿昨天的数字冒充今天——
+  // 2026-10-28 用户看到的「今天发出 0 / 全部 810 条」就是旧宿主 + 旧数据造成的。
+  const mergedMs = merged.ts ? new Date(merged.ts).getTime() : 0
+  const dataAgeMin = Number.isFinite(mergedMs) && mergedMs > 0
+    ? Math.max(0, Math.round((Date.now() - mergedMs) / 60000))
+    : null
+
   return {
     version,
     updatedAt: toIso(merged.ts),
     dataQuality: {
+      dataAgeMin,
       approvalsCorrupt,
       lastRunnerAt,
       runnerStaleMin,
