@@ -361,16 +361,13 @@ function createUiKit(React) {
       intro: '今天要办的事：谁在等我回、今天该发谁、发出去的有没有人回。',
       refresh: '刷新',
       loading: '加载中…',
-      empty: '暂无数据',
+      empty: '还没读到快照 —— 点右上「刷新」；还是空就说明后台采集没在跑',
       updated: '快照 {time}',
       noUpdated: '尚无快照',
       daily: '今日简报',
       dailyDecide: '待你决定 {n} 个',
-      dailyRead: '已读未回 {n}',
       dailyOutreach: '今日已发首触 {n} 条（A {a} / B {b}）',
-      dailyFailed: '未送达 {n} 条',
       statThreads: '会话',
-      statPending: '待拍板',
       statDecide: '待你决定',
       statRead: '已读未回',
       statInterview: '已约/已面',
@@ -386,9 +383,9 @@ function createUiKit(React) {
       colNext: '下一步',
       interviewEmpty: '暂无进行中或已确定的面试',
       search: '搜索公司 / 岗位 / 消息',
-      filterWait: '只看该你回',
+      filterWait: '只看等我回',
       filterAll: '全部',
-      noMatch: '没有匹配的会话。',
+      noMatch: '没有匹配的会话 —— 换个关键词，或点「全部」清掉筛选',
       loadFailed: '读取失败：{message}',
       retry: '重试',
       fromMe: '我',
@@ -410,7 +407,7 @@ function createUiKit(React) {
       stage: '融资',
       recruiter: '对接人',
       state: '状态',
-      first: '首次触达',
+      first: '首触时间',
       channel: '渠道',
       ab: 'A/B',
       wait: '距上次沟通',
@@ -426,98 +423,94 @@ function createUiKit(React) {
       tabAll: '全部会话',
       kpiToday: '今天发出',
       kpiWait: '等我回',
-      kpiReplied: '已回',
-      kpiTbd: '待定 {n}',
+      kpiReplied: '有人回',
+      kpiTbd: '面试待定 {n}',
       todayInterview: '今天面试',
       interviewTbdChip: '待定',
       failedTitle: '{n} 条发送失败',
-      resend: '重新发送',
-      approvalCounts: '候选 {total} · 待发 {todo} · 已发 {sent} · 不发 {skipped}',
+      resend: '重新发出',
+      approvalCounts: '首触 {total} 家 · 待你定 {todo} · 已发出 {sent} · 不发 {skipped}',
       approvalMore: '还有 {n} 条待决定',
       approvalAllDone: '今天的候选都处理完了 —— 没有等你决定的草稿',
-      kpiRepliedHint: '今天/最近发出的 {n} 条已经有人回了',
+      kpiRepliedHint: '今天发出的 {n} 条里，对方已经回了',
       kpiInterview: '面试',
       waitTitle: '等我回',
       waitSub: '对方最后一句在等你，回完这条就翻篇',
-      waitEmpty: '现在没有等你回的消息',
-      goReply: '去回',
+      waitEmpty: '现在没有等我回的消息 —— 都回完了',
+      goReply: '去回复',
       consentNeeded: '待同意发简历',
       goReplyHint: '新标签打开 BOSS 聊天，公司名已复制到剪贴板',
-      openInBoss: '在 BOSS 打开聊天',
       sentNone: '暂无回复',
-      sentTitleNone: '已发出，暂无回复',
-      kpiFailed: '未送达',
-      sentTitle: '发出去了，等回复',
+      sentTitleNone: '已发出',
+      kpiFailed: '发送失败',
+      sentTitle: '已发出',
       sentLine: '已发出 {n} 条 · 待回 {wait} · 最后 {time}',
       daysAgo: '{n} 天前',
       tierUnknown: '未评级',
-      allLink: '全部 {n} 条会话 →',
+      allLink: '全部 {n} 个会话 →',
       tabInterview: '面试',
       tabThreads: '会话',
       stateDist: '状态分布',
       recentDaysTitle: '近 14 天首触',
       recentDaysSub: '按本地日历日去重，已发首触（含面板审批发出的），单位：家/天',
-      interviewTbd: '另有 {n} 条待定（日期未定）',
-      interviewClosed: '已取消 {a} · 已完成 {b}',
+      interviewTbd: '另有 {n} 场待定（日期未定）',
+      interviewClosed: '已取消 {a} 场 · 已完成 {b} 场',
       interviewNone: '近期没有面试',
-      threadsCount: '{rows} 条会话 / {companies} 家',
+      threadsCount: '{rows} 个会话 · {companies} 家公司',
       actionTitle: '需要行动',
       actionSub: '要你拍板的事',
       actionEmpty: '当前没有需要立即处理的事',
-      pendingTitle: '待你拍板',
       pendingSub: 'AI 判不准、没敢自动发',
       pendingEmpty: '队列是空的 —— 没有卡在人工这一环的草稿',
       pendingSent: '已发',
       pendingDrop: '忽略',
       pendingMarked: '已标记',
       pendingFailed: '标记失败：{message}',
-      tabApproval: '审批',
       statApproval: '待审批',
       approvalTitle: '待发首触',
       notCollected: '未采集',
       coverageLine: '资料 {filled}/{total} · 缺：{missing}',
-      coverageComplete: '（齐全）',
+      coverageComplete: '无',
       field_jd: 'JD 正文',
       field_salary: '薪资',
       field_city: '城市',
-      field_jobId: '职位链接',
+      field_jobId: '岗位链接',
       field_recruiter: '对接人',
       field_tier: '匹配档位',
-      approvalSub: '点「发送」= 把这条草稿发给对方（10 分钟内后台发出，发出后不可撤回）；点「不发」= 永久不再出现，可随时点「撤回」找回',
-      approvalEmpty: '没有待审批的候选人 —— 今日候选都处理完了',
-      approvalStale: '宿主还没加载审批数据 —— index.js 没重载，重启一次 DSH 后这里就会出现候选',
+      approvalSub: '点「发出这条」= 10 分钟内自动发给对方，发出后不能收回；点「不发」= 永久移出，之后可点「收回」找回',
+      approvalEmpty: '今天的首触都处理完了 —— 没有等你决定的草稿',
+      approvalStale: '面板比后台旧，读不到待发数据 —— 重启一次 DSH 就会显示',
       approvalSendLog: '最近发送',
       approvalSendLogSub: '最近 8 条，带送达状态；点开看聊天和 JD',
       approvalSendLogEmpty: '还没有发出记录',
       approvalActApprove: '发送',
       approvalActSkip: '不发',
-      approvalChatNone: '这个岗位还没建会话；点「通过」后由发送端主动开聊',
+      approvalChatNone: '这个岗位还没开聊；点「发出这条」后会自动打招呼',
       approvalNoJd: 'JD 没有存档，点下面的原链接看岗位页',
-      approvalSummary: '待批 {pending} · 已通过待发 {approved} · 已发 {sent} · 跳过 {skipped}',
       approvalApprove: '发送',
-      approvalSendHint: '10 分钟内后台发出；发出后不能撤回',
+      approvalSendHint: '10 分钟内自动发出；发出后不能收回',
       approvalFactBlocked: '上次被事实闸门拦下，文案已改写',
-      approvalSkip: '跳过',
-      approvalRevoke: '撤回',
+      approvalSkip: '不发',
+      approvalRevoke: '收回',
       approvalApproved: '已通过，agent 发送时会回写结果',
-      approvalSkipped: '已跳过',
-      approvalRevoked: '已撤回为待审批',
-      approvalQueued: '已通过，发送端会在 10 分钟内用这条草稿发出；成功后这里会变成「已发送」',
-      replyNeeded: '该你回',
-      threadsHint: '「该你回」= 对方最后一句还没回；其余是等对方或已结束。点任意一行看完整聊天。',
+      approvalSkipped: '不发',
+      approvalRevoked: '已收回，回到待发',
+      approvalQueued: '已排上，10 分钟内用这条草稿发出；发出后这里会变成「已发出」',
+      replyNeeded: '等我回',
+      threadsHint: '「等我回」= 对方最后一句还没回；其余是等对方或已结束。点任意一行看完整聊天。',
       approvalFailed: '操作失败：{message}',
       approvalStaleDraft: '这条草稿在你查看后改过 —— 重新打开看一眼再发',
       approvalPeekFirst: '先打开这一条看一眼 JD 和草稿，再点发送',
       approvalGone: '这条已经不在待发队列里了（可能刚被发出或队列被重写），已刷新',
-      approvalsCorrupt: '审批文件一时读不出来（可能后台正在写），下面的待发列表不是真实状态 —— 稍等会自动恢复',
+      approvalsCorrupt: '待发清单暂时读不出来（可能正在写入）—— 下面的列表不是最新状态，稍等会自动恢复',
       hardGateChip: 'JD 硬门槛',
-      approvalStuck: '有 {n} 条已通过但超过 20 分钟没发出去 —— 后台发送器可能没在跑（dsh 的 boss-approval-send 任务）',
+      approvalStuck: '有 {n} 条已排上、超过 20 分钟没发出 —— 后台发送任务可能停了（boss-approval-send）',
       chatOlder: '上面还有 {n} 条更早的聊天，这里只显示最近 30 条',
       hardGateWarn: 'JD 写明了硬性条件，先确认你够得上再发',
-      approvalStatusPending: '待审批',
-      approvalStatusApproved: '已通过 · 待发送',
-      approvalStatusSent: '已发送',
-      approvalStatusSkipped: '已跳过',
+      approvalStatusPending: '待决定',
+      approvalStatusApproved: '待发出',
+      approvalStatusSent: '已发出',
+      approvalStatusSkipped: '不发',
       approvalStatusFailed: '发送失败',
       approvalJd: 'JD 详情',
       approvalCompany: '公司详情',
@@ -549,21 +542,18 @@ function createUiKit(React) {
       intro: 'Threads, replies owed, and interviews, read from local job-search snapshots. Read-only.',
       refresh: 'Refresh',
       loading: 'Loading…',
-      empty: 'No data',
+      empty: 'No snapshot yet — hit Refresh; if still empty the collector is not running',
       updated: 'Snapshot {time}',
       noUpdated: 'No snapshot yet',
       daily: 'Today',
       dailyDecide: 'Decisions waiting: {n}',
-      dailyRead: 'Read, no reply {n}',
       dailyOutreach: 'First touches sent today: {n} (A {a} / B {b})',
       statThreads: 'Threads',
-      statPending: 'Pending',
       statDecide: 'To decide',
       statRead: 'Read, no reply',
       statInterview: 'Scheduled/done',
       statOutreach: 'Today outreach',
       statTodayThreads: 'Threads today',
-      dailyFailed: '{n} not delivered',
       statAB: 'Today A/B',
       sectionInterview: 'Interviews',
       sectionThreads: 'Threads',
@@ -623,7 +613,6 @@ function createUiKit(React) {
       goReply: 'Reply',
       consentNeeded: 'Resume consent pending',
       goReplyHint: 'Opens BOSS chat in a new tab, company name copied',
-      openInBoss: 'Open chat in BOSS',
       sentNone: 'No replies yet',
       sentTitleNone: 'Sent — no replies yet',
       kpiFailed: 'Failed',
@@ -638,14 +627,12 @@ function createUiKit(React) {
       actionTitle: 'Needs action',
       actionSub: 'Decide / read-no-reply',
       actionEmpty: 'Nothing needs attention right now',
-      pendingTitle: 'Waiting on you',
       pendingSub: 'Low-confidence drafts held back',
       pendingEmpty: 'Queue is empty — no draft stuck on a human decision',
       pendingSent: 'Sent',
       pendingDrop: 'Ignore',
       pendingMarked: 'Marked',
       pendingFailed: 'Mark failed: {message}',
-      tabApproval: 'Approval',
       statApproval: 'To approve',
       approvalTitle: 'First touches to send',
       notCollected: 'not collected',
@@ -667,7 +654,6 @@ function createUiKit(React) {
       approvalActSkip: 'Discard',
       approvalChatNone: 'No thread yet — sending will open the conversation',
       approvalNoJd: 'No archived JD — open the original posting below',
-      approvalSummary: 'Waiting {pending} · Approved {approved} · Sent {sent} · Skipped {skipped}',
       approvalApprove: 'Send',
       approvalSendHint: 'Sent in background within 10 min; cannot be undone',
       approvalFactBlocked: 'Blocked by fact gate last time; draft rewritten',
@@ -841,7 +827,7 @@ function createUiKit(React) {
         return lang === 'en' ? `${n} h ago` : `${n} 小时前`
       }
       const d = new Date(ms)
-      return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+      return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     }
 
     function shortDate(text) {
@@ -1375,50 +1361,6 @@ function createUiKit(React) {
 
     /** 概览页「需要行动」：只放「待你决定」——用户 2026-10-27 定调两个等回复状态后，
      *  「已读不回」已并入等对方/已结束，这里不再单列。 */
-    function ActionRows({ threads, t, onOpen }) {
-      const rows = (threads ?? []).filter(
-        (item) => item.state === '待你决定',
-      )
-      if (!rows.length) {
-        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('actionEmpty')))
-      }
-      return h(
-        'div',
-        { className: 'boss-action' },
-        rows.slice(0, 6).map((item) =>
-          h(
-            'div',
-            {
-              key: `${item.company}|${item.who}`,
-              className: 'boss-action-row',
-              ...clickProps(() => onOpen(item.company), `${item.company} ${item.who || ''} 打开详情`),
-            },
-            h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state),
-            h(
-              'div',
-              { className: 'boss-action-main' },
-              h('div', { className: 'boss-co', title: item.company }, item.company || '—'),
-              h('div', { className: 'boss-sub' }, item.who || ''),
-            ),
-            h('span', { className: 'boss-nx' }, item.next || '—'),
-            h('span', { className: 'boss-action-msg', title: item.last }, clip(item.last)),
-          ),
-        ),
-      )
-    }
-
-    /**
-     * 「待你拍板」队列：jev 判 review 的草稿不再静默丢弃。
-     * 每条显示 公司/对接人 · 岗位 · 为什么没敢自动发(conf) · 草稿全文，
-     * 右边两个动作：标记已发（发完由发送链回写）/ 忽略。
-     */
-    /**
-     * 待审批队列：概览页里的一张紧凑表（2026-10-28 返工）。
-     *
-     * 用户明确要求「别单独开 Tab、别把详情摊在列表里 —— 弹窗我们本来就有」，
-     * 所以这里只保留判断依据（档位 / 公司岗位 / 薪资城市 / 草稿首句），
-     * JD 全文、公司详情、完整聊天记录一律进 ApprovalModal。
-     */
     const APPROVAL_TONE = {
       pending: 'info',
       approved: 'success',
@@ -1564,6 +1506,8 @@ function createUiKit(React) {
     }
 
     /** JD 按空行切段，读屏能一段段跳，低视力用户不会被一整块 12px 长文砸（a11y 评审 #11）。 */
+
+    /** JD 按空行切段，读屏能一段段跳，低视力用户不会被一整块 12px 长文砸（a11y 评审 #11）。 */
     function jdParagraphs(text) {
       return String(text || '')
         .split(/\n\s*\n+/)
@@ -1610,7 +1554,7 @@ function createUiKit(React) {
               h(
                 'div',
                 { className: 'boss-aq-meta' },
-                [item.days === 0 ? t('today') : item.days != null ? t('daysAgo', { n: item.days }) : '', item.state]
+                [item.days === 0 ? t('today') : item.days != null ? t('daysAgo', { n: item.days }) : '']
                   .filter(Boolean)
                   .join(' · '),
               ),
@@ -1995,7 +1939,6 @@ function createUiKit(React) {
       // 「全部会话」默认先只看该你回的，810 行一次性摊开等于没排序（UX #8）。
       const [onlyWait, setOnlyWait] = React.useState(true)
       const [openCompany, setOpenCompany] = React.useState(null)
-      const [notice, setNotice] = React.useState('')
       const [approvalNotice, setApprovalNotice] = React.useState('')
       const [approvalOpen, setApprovalOpen] = React.useState(null)
       // 看过内容才允许行内一键发：不读 JD/对话直接点「发送」等于盲发（安全评审 #6）。
@@ -2441,7 +2384,7 @@ function createUiKit(React) {
                   h(
                     UI.Button,
                     { variant: 'ghost', size: 'sm', onClick: () => setTab('threads') },
-                    t('allLink', { n: counts.companies ?? counts.threads ?? 0 }),
+                    t('allLink', { n: counts.threadRows ?? data?.threads?.length ?? 0 }),
                   ),
                 ),
               )

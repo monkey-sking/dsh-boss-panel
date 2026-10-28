@@ -47,7 +47,7 @@ deepseek HARNESS
 
 **首触审批不单开 Tab**：待发首触是一组行，每行左边是判断依据（档位 + 公司·岗位 + 薪资·城市 + 对方状态），
 右边直接给「发送 / 不发」，**不点开也能决策**；点整行才开详情弹窗 —— 状态徽标、岗位/公司 kv、
-证据与缺口、首触文案、**完整聊天记录**、**JD 全文**（带原链接），底部按状态给「发送 / 不发」或「撤回」。
+证据与缺口、首触文案、**完整聊天记录**、**JD 全文**（带原链接），底部按状态给「发出这条 / 不发」或「收回」。
 详情按 `id+draftHash` 缓存，第二次打开是秒开。
 
 同一家公司不会同时出现在待发首触和「等我回」里；会话表、最近发送、近期面试的任意一行点开，
@@ -77,7 +77,7 @@ deepseek HARNESS
 面板**只写两处状态**，其余求职数据只读、不调模型、不触发探针：
 
 - `boss_pending_decisions.json` — 概览「待你拍板」区块的 已发/忽略（`op=pending_mark`，2026-10-25 起）
-- `boss_approvals.json` — 概览里待审批行的 通过/跳过/撤回（`op=approval_decide`，2026-10-28 起）
+- `boss_approvals.json` — 概览里首触行的 发出这条/不发/收回（`op=approval_decide`，2026-10-28 起）
 
 文件按 mtime 缓存，只有变了才重读。
 面板打开期间每 15 秒轮询一次；关掉面板即停表。
@@ -174,7 +174,7 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
    条目：`{id,date,company,jobTitle,salary,city,jobId,tier,evidence,gap,draft,draftHash,jdText,status}`
    `id` 形如 `20261028-<公司>-<encryptJobId>`，`draftHash` 自动算（sha1 前 16 位）。
 2. **用户在「今天」的待发行上点「发送」（或点开弹窗后点「发送」）** → `op=approval_decide` 把 `status` 改成 `approved` 并写 `approvedAt`；
-   点「跳过」写 `skipped`；已决策的卡可「撤回」回 `pending`。`sent/failed` 只能由发送侧写，面板无权。
+   点「不发」写 `skipped`；已决策的卡可「收回」回 `pending`。`sent/failed` 只能由发送侧写，面板无权。
 3. **`boss_approval_runner.py` 每 10 分钟扫一次**（noagent 任务 `boss-approval-send`）：
    只挑 `approved` 且 `draftHash` 仍与草稿一致的条目 → 生成发件箱队列 → `BOSS_OUTBOX_CONFIRMED=1`
    `boss_outbox.sh start` → 轮询结果 → `settle` 回写 `sent|failed`（失败原因存 `sendResult`）。
@@ -207,7 +207,7 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
   与 `~/.hermes/state/boss_*.json` 为 `0600`；面板与脚本写入都走「临时文件 + rename」并用 `0600`。
   队列/结果文件 `approval_queue_*.json` / `approval_result_*.json` 保留 7 天后自动清。
 - **盲发拦截**：行内「发送」必须先打开过一次该条详情（看过 JD/草稿/对话），否则自动打开弹窗并提示；
-  弹窗里常驻「10 分钟内后台发出；发出后不能撤回」。
+  弹窗里常驻「10 分钟内自动发出；发出后不能收回」。
 
 发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`，**不可覆盖**）与
 `boss_shortlist_gate.py`（首触缺 `job`/`jd` 直接拒发）。首触且无历史会话时，
