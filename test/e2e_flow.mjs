@@ -66,7 +66,38 @@ try {
   assert.equal(snap.approvals.stats.sent, 1)
   assert.equal(snap.daily.todayOutreach, 1, '今天发出要算上审批链发出的这一条')
 
-  console.log('E2E OK: pending → approved → queue → sent → 面板今日发出=1')
+  // —— TTL：批准 30 分钟后失效，必须退回「待决定」，不能隔夜偷发 ——
+  const stale = { ...item, id: 'e2e-002', company: '示例网络', draft: '您好，想发一份战斗 AI 拆解给您看。' }
+  const stalePath = path.join(dir, 'item2.json')
+  await import('node:fs/promises').then(({ writeFile }) =>
+    writeFile(stalePath, JSON.stringify([stale])),
+  )
+  run('add', '--json', stalePath)
+  run('mark', '--id', 'e2e-002', '--status', 'approved')
+  const { readFile: readF, writeFile: writeF } = await import('node:fs/promises')
+  const file = path.join(dir, 'boss_approvals.json')
+  const doc = JSON.parse(await readF(file, 'utf8'))
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+  doc.items.find((x) => x.id === 'e2e-002').approvedAt = twoHoursAgo
+  await writeF(file, JSON.stringify(doc))
+  const expired = JSON.parse(run('queue', '--out', path.join(dir, 'queue2.json')))
+  assert.equal(expired.queue, 0, '过期批准不能进队列')
+  snap = await buildSnapshot({ dataDir: dir })
+  assert.equal(
+    snap.approvals.items.find((x) => x.id === 'e2e-002').status,
+    'pending',
+    '过期批准要退回待决定',
+  )
+
+  // —— 批准后草稿被改写：hash 对不上就不能发（防「发的不是我点的那版」）——
+  run('mark', '--id', 'e2e-002', '--status', 'approved')
+  const doc2 = JSON.parse(await readF(file, 'utf8'))
+  doc2.items.find((x) => x.id === 'e2e-002').draft = '您好，这是批准之后偷偷改掉的一版文案。'
+  await writeF(file, JSON.stringify(doc2))
+  const changed = JSON.parse(run('queue', '--out', path.join(dir, 'queue3.json')))
+  assert.equal(changed.queue, 0, '草稿改动后不能进队列')
+
+  console.log('E2E OK: pending → approved → queue → sent → 今日发出=1；过期批准与改动草稿都被拦')
 } finally {
   await rm(dir, { recursive: true, force: true })
 }
