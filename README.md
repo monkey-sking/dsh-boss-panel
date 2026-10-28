@@ -31,6 +31,7 @@ deepseek HARNESS
 
 | Tab | 内容 |
 | --- | --- |
+| **审批**（2026-10-28） | 待发送的首触候选卡：证据／缺口／草稿 → 展开看 JD 全文、公司详情、完整聊天记录 → 「通过并发送 / 跳过」 |
 | **概览** | 今日简报 → 6 张统计卡 → 状态分布条（8 状态按占比铺色带 + 图例）→ 双栏（需要行动 / 近期面试）→ 最近 14 天沟通柱 |
 | **面试** | 面试日程表（7 列 + 天差 chip） |
 | **会话** | 搜索框 + 状态多选 chips + 5 列会话表 |
@@ -48,7 +49,7 @@ deepseek HARNESS
 | 最近沟通 | `contacted.json` 最近 80 条，倒序 |
 | 全部线程 | `boss_threads.json` 前 200 条，可按公司/对接人搜索 |
 
-## 数据来源（只读）
+## 数据来源
 
 默认目录 `~/.local/share/dsh-data/workstreams/job-search`，可用 `dataDir` 配置覆盖：
 
@@ -58,7 +59,12 @@ deepseek HARNESS
 - `contacted.json` — 已沟通记录
 - `boss_jev_state.json` — 公司级状态判定
 
-面板**不写**任何求职数据、不调模型、不触发探针。文件按 mtime 缓存，只有变了才重读。
+面板**只写两处状态**，其余求职数据只读、不调模型、不触发探针：
+
+- `boss_pending_decisions.json` — 概览「待你拍板」区块的 已发/忽略（`op=pending_mark`，2026-10-25 起）
+- `boss_approvals.json` — 审批 Tab 的 通过/跳过/撤回（`op=approval_decide`，2026-10-28 起）
+
+文件按 mtime 缓存，只有变了才重读。
 面板打开期间每 15 秒轮询一次；关掉面板即停表。
 
 ## 结构
@@ -111,8 +117,9 @@ plugin_manager install_bundle target=<你的插件目录>/dsh-boss-panel
 ## 测试
 
 ```
-node test/render_test.mjs   # 有状态渲染测试：驱动三个 Tab 切换，15 项断言
-node test/detail_test.mjs   # detail op 字段与聊天记录
+node test/render_test.mjs     # 有状态渲染测试：驱动三个 Tab 切换，15 项断言
+node test/approval_test.mjs   # 审批 Tab：12 张卡、通过/跳过按钮、点通过真的 POST approval_decide
+node test/detail_test.mjs     # detail op 字段与聊天记录
 ```
 
 `render_test.mjs` 用可变 `useState` 的 React 桩，模拟点击 Tab 按钮后重建组件树，
@@ -135,3 +142,38 @@ node test/detail_test.mjs   # detail op 字段与聊天记录
 - 面板回写：概览页「待你拍板」区块的 已发/忽略 按钮走 `op=pending_mark` RPC。
 - 为什么有它：jev 阈值 0.90 很严（本批 22 条草稿 conf 全在 0.48-0.94），多数落 review →
   以前只能靠人当场拍、落不了盘就静默丢了。现在排队，人回头在面板里点一下即可。
+
+## 审批与自动发送（2026-10-28）
+
+用户口径：**「我切换状态，你检测到能发就发」**——授权动作从「在对话里点名」搬到面板点击。
+
+三段链路，缺一段都不发：
+
+1. **agent 写候选** → `boss_approvals.py add --json items.json`
+   条目：`{id,date,company,jobTitle,salary,city,jobId,tier,evidence,gap,draft,draftHash,jdText,status}`
+   `id` 形如 `20261028-<公司>-<encryptJobId>`，`draftHash` 自动算（sha1 前 16 位）。
+2. **用户在审批 Tab 点「通过并发送」** → `op=approval_decide` 把 `status` 改成 `approved` 并写 `approvedAt`；
+   点「跳过」写 `skipped`；已决策的卡可「撤回」回 `pending`。`sent/failed` 只能由发送侧写，面板无权。
+3. **`boss_approval_runner.py` 每 10 分钟扫一次**（noagent 任务 `boss-approval-send`）：
+   只挑 `approved` 且 `draftHash` 仍与草稿一致的条目 → 生成发件箱队列 → `BOSS_OUTBOX_CONFIRMED=1`
+   `boss_outbox.sh start` → 轮询结果 → `settle` 回写 `sent|failed`（失败原因存 `sendResult`）。
+   没有 approved 时**直接 IDLE 退出，不碰浏览器**。
+
+授权语义：`approved + approvedAt` 这条记录本身就是当次用户授权，脚本据此才设置
+`BOSS_OUTBOX_CONFIRMED=1`；模型不再手写这个环境变量。审计流水：
+`~/.hermes/state/boss_approval_audit.jsonl`（dispatch / blocked / settled / no_result）。
+
+发送前仍过两道闸：`boss_fact_gate.py`（事实越界 → `fact_blocked`）与
+`boss_shortlist_gate.py`（首触缺 `job`/`jd` 直接拒发）。首触且无历史会话时，
+`boss_outbox_send.js` 会先用 `item.jobId` 打开 JD 页点「立即沟通」再发。
+
+CLI 速查：
+
+```
+python3 boss_approvals.py add --json items.json   # 并入候选（已决策条目只更新事实字段）
+python3 boss_approvals.py list [--status approved]
+python3 boss_approvals.py stats
+python3 boss_approvals.py queue --out /tmp/q.json [--dry]
+python3 boss_approvals.py mark --id X --status pending|approved|skipped|sent|failed
+python3 boss_approval_runner.py [--dry-run] [--quiet] [--notify]
+```

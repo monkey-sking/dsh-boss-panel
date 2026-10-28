@@ -20,6 +20,317 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
 
+function createUiKit(React) {
+  const h = React.createElement
+  const { useState, useEffect, useRef, useCallback } = React
+
+  // -------------------------------------------------------------------------
+  // CSS  (mirrors primitives' *.module.css, class names renamed to dp-*)
+  // -------------------------------------------------------------------------
+  const CSS = `
+/* ===== dsh-panel ui-kit v1 (copied from dsh-client-ui-primitives) ===== */
+
+.dp-btn {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px; border: none; border-radius: var(--dsw-radius-md); cursor: pointer;
+  font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary);
+  background: transparent; padding: 0 14px;
+}
+.dp-btn:disabled { cursor: not-allowed; opacity: 0.4; }
+.dp-btn-md { height: 36px; }
+.dp-btn-sm { height: 28px; font-size: 12px; line-height: 18px; padding: 0 10px; border-radius: var(--dsw-radius-sm); }
+.dp-btn-primary { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.dp-btn-primary:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); }
+.dp-btn-ghost:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dp-btn-ghost:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
+.dp-btn-outline { border: 0.5px solid var(--dsw-alias-border-l3); background: transparent; }
+.dp-btn-outline:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dp-btn-toolbar { background: var(--dsw-alias-button-tool-bar-fill); }
+.dp-btn-toolbar:hover:not(:disabled) { background: var(--dsw-alias-button-tool-bar-hover); }
+.dp-btn-danger { background: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-label-primary-foreground); }
+.dp-btn-danger:hover:not(:disabled) { filter: brightness(0.92); }
+.dp-btn-icon { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; }
+.dp-btn:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
+
+/* Tag — capsule, tone varies */
+.dp-tag {
+  display: inline-flex; align-items: center; border-radius: 999px; padding: 1px 8px;
+  font-size: 11px; line-height: 17px; font-weight: 500; white-space: nowrap;
+}
+.dp-tag[data-tone='outline'] { border: 0.5px solid var(--dsw-alias-border-l4); color: var(--dsw-alias-label-tertiary); }
+.dp-tag[data-tone='solid'] { background: var(--dsw-alias-label-primary); color: var(--dsw-alias-bg-layer-3); }
+.dp-tag[data-tone='neutral'] { background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); }
+.dp-tag[data-tone='quiet'] { color: var(--dsw-alias-label-tertiary); }
+.dp-tag[data-tone='success'] { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); color: var(--dsw-alias-state-success-primary); }
+.dp-tag[data-tone='info'] { background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent); color: var(--dsw-alias-state-business-primary); }
+.dp-tag[data-tone='warning'] { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); color: var(--dsw-alias-state-warn-primary); }
+.dp-tag[data-tone='danger'] { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); color: var(--dsw-alias-state-error-primary); }
+
+/* Pill — filter chip */
+.dp-pill {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
+  border: none; border-radius: 999px; font-size: 12px; line-height: 18px;
+  color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2);
+}
+.dp-pill-interactive { cursor: pointer; }
+.dp-pill-interactive:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.dp-pill-active { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-button-ghost-active-fill); box-shadow: inset 0 0 0 1px var(--dsw-alias-button-ghost-active-border); }
+
+/* StateDot */
+.dp-dot { position: relative; display: inline-block; flex: none; width: 10px; height: 10px; }
+.dp-dot::after { content: ''; position: absolute; inset: 20%; border-radius: 50%; background: currentColor; }
+.dp-dot[data-state='done'] { color: var(--dsw-alias-state-success-primary); }
+.dp-dot[data-state='warning'] { color: var(--dsw-alias-state-warn-primary); }
+.dp-dot[data-state='error'] { color: var(--dsw-alias-state-error-primary); }
+.dp-dot[data-state='idle'] { color: var(--dsw-alias-state-idle-primary); }
+.dp-dot[data-state='info'] { color: var(--dsw-alias-state-business-primary); }
+.dp-spinner { flex: none; color: var(--dsw-alias-label-tertiary); }
+.dp-spinner-motion { transform-origin: center; animation: dp-spin 1.5s linear infinite; }
+.dp-spinner-track, .dp-spinner-arc { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.dp-spinner-track { opacity: 0.25; }
+.dp-spinner-arc { stroke-dasharray: 12 150; animation: dp-dash 1.5s ease-in-out infinite; }
+@keyframes dp-spin { to { transform: rotate(360deg); } }
+@keyframes dp-dash { 0% { stroke-dasharray: 12 150; stroke-dashoffset: 0; } 50% { stroke-dasharray: 24 150; stroke-dashoffset: -6; } 100% { stroke-dasharray: 12 150; stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .dp-spinner-motion, .dp-spinner-arc { animation: none; } .dp-spinner-arc { stroke-dasharray: 18 150; stroke-dashoffset: -3; } }
+
+/* SegmentedTabs */
+.dp-tabs { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: max-content; width: fit-content; max-width: 100%; padding: 4px; border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-bg-module-platform); }
+    .dp-tabs-full { display: grid; grid-auto-columns: 1fr; }
+.dp-tabs-indicator { position: absolute; top: 4px; bottom: 4px; left: 4px; box-sizing: border-box; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); transition: transform 180ms ease, width 180ms ease; pointer-events: none; }
+.dp-tab { position: relative; justify-content: center; height: 34px; padding: 0 12px; border-radius: var(--dsw-radius-md); border: none; background: transparent; color: var(--dsw-alias-label-secondary); transition: color 180ms ease; cursor: pointer; font: inherit; }
+.dp-tab:hover, .dp-tab[aria-selected='true'] { background: transparent; color: var(--dsw-alias-label-primary); }
+.dp-tab[aria-selected='true'] { font-weight: 600; }
+.dp-tab:focus-visible { outline: none; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { .dp-tabs-indicator, .dp-tab { transition: none; } }
+
+/* SearchInput */
+.dp-input-wrap { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-1); }
+.dp-input-wrap:focus-within { border-color: var(--dsw-alias-state-business-primary); }
+.dp-input-icon { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--dsw-alias-label-tertiary); }
+.dp-input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); }
+.dp-input::placeholder { color: var(--dsw-alias-label-dimmed); }
+
+/* Switch */
+.dp-switch { box-sizing: border-box; position: relative; flex: 0 0 auto; width: 36px; height: 20px; padding: 2px; border: 0; border-radius: 999px; background: var(--dsw-alias-border-l3); cursor: pointer; }
+.dp-switch[aria-checked='true'] { background: var(--dsw-alias-brand-primary); }
+.dp-switch:disabled { cursor: default; opacity: 0.5; }
+.dp-switch:focus-visible { outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
+.dp-switch-thumb { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-label-primary-foreground); transition: transform 120ms ease; }
+.dp-switch[aria-checked='false'] .dp-switch-thumb { background: var(--dsw-alias-switch-thumb); }
+.dp-switch[aria-checked='true'] .dp-switch-thumb { transform: translateX(16px); }
+
+/* Modal */
+.dp-modal-root { pointer-events: auto; position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: max(24px, var(--dsh-frame-overlay-top, 24px)) 24px; }
+.dp-modal-mask { position: absolute; inset: var(--dsh-frame-chrome-top, 0px) 0 0; backdrop-filter: var(--dsw-mask-blur); }
+.dp-modal-mask::after { content: ''; position: absolute; inset: 0; background: var(--dsw-alias-bg-mask-1); animation: dp-modal-enter var(--ds-transition-duration, 160ms) var(--ds-ease-in-out, ease); }
+.dp-modal-dialog { box-sizing: border-box; position: relative; z-index: 1; display: flex; flex-direction: column; gap: 20px; width: min(560px, 100%); max-height: 100%; padding: 0 0 24px; overflow: hidden; border: 0; border-radius: var(--dsw-radius-panel); background: var(--dsw-alias-bg-layer-2); box-shadow: var(--dsw-elevation-prominent); animation: dp-modal-enter var(--ds-transition-duration, 160ms) var(--ds-ease-in-out, ease); }
+.dp-modal-dialog[data-size='sm'] { width: min(380px, 100%); }
+.dp-modal-dialog[data-size='lg'] { width: min(760px, 100%); }
+@keyframes dp-modal-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .dp-modal-mask::after, .dp-modal-dialog { animation: none; } }
+.dp-modal-dialog:focus { outline: none; }
+.dp-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 22px 14px 12px 24px; }
+.dp-modal-title { margin: 0; font-size: 16px; line-height: 24px; font-weight: 500; color: var(--dsw-alias-label-primary); }
+.dp-modal-close { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: none; border-radius: var(--dsw-radius-sm); background: transparent; cursor: pointer; color: var(--dsw-alias-label-secondary); }
+.dp-modal-close:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.dp-modal-description { margin: 0; padding: 0 24px; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); }
+.dp-modal-body { display: flex; flex-direction: column; min-width: 0; margin-top: 20px; padding: 0 24px; overflow: auto; }
+.dp-modal-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 24px; }
+
+/* Toast */
+.dp-toast { position: fixed; top: 40px; left: 50%; z-index: 1100; pointer-events: none; display: flex; align-items: center; gap: 10px; width: max-content; max-width: min(640px, calc(100vw - 48px)); padding: 12px 16px; border-radius: var(--dsw-radius-lg); background: var(--dsw-alias-toast-bg); color: var(--dsw-alias-toast-label); font-size: 14px; line-height: 22px; box-shadow: var(--dsw-shadow-lv3); transform: translateX(-50%); animation: dp-toast-in 160ms ease-out, dp-toast-fade 1000ms ease var(--dp-toast-hold, 3000ms) forwards; }
+.dp-toast-icon { display: grid; place-items: center; flex: none; color: var(--dsw-alias-state-warn-label); }
+.dp-toast-icon[data-tone='success'] { color: var(--dsw-alias-state-success-primary); }
+.dp-toast-icon[data-tone='info'] { color: var(--dsw-alias-state-business-primary); }
+.dp-toast-text { min-width: 0; }
+@keyframes dp-toast-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes dp-toast-fade { to { opacity: 0; visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .dp-toast { animation: dp-toast-fade 1000ms ease var(--dp-toast-hold, 3000ms) forwards; } }
+
+/* Layout helpers (not from primitives; pure token layout) */
+.dp-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 16px; color: var(--dsw-alias-label-tertiary); font-size: 13px; text-align: center; }
+.dp-statcard { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-2); border: 0.5px solid var(--dsw-alias-border-l3); }
+.dp-statcard-label { font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); }
+.dp-statcard-value { font-size: 20px; line-height: 28px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.dp-statcard-value[data-tone='success'] { color: var(--dsw-alias-state-success-primary); }
+.dp-statcard-value[data-tone='warning'] { color: var(--dsw-alias-state-warn-primary); }
+.dp-statcard-value[data-tone='danger'] { color: var(--dsw-alias-state-error-primary); }
+.dp-section-title { margin: 0; font-size: 13px; line-height: 20px; font-weight: 600; color: var(--dsw-alias-label-secondary); letter-spacing: 0.01em; }
+`
+
+  // -------------------------------------------------------------------------
+  // Icons (inline SVG, 16x16, currentColor)
+  // -------------------------------------------------------------------------
+  const svg = (pathD, opts = {}) =>
+    h('svg', { viewBox: '0 0 16 16', width: 16, height: 16, fill: 'none',
+      stroke: 'currentColor', 'stroke-width': opts.w || 1.5,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+      'aria-hidden': true, ...opts.extra },
+      h('path', { d: pathD }))
+  const IconSearch = () => svg('M7 13A6 6 0 1 0 7 1a6 6 0 0 0 0 12ZM11.5 11.5 14 14')
+  const IconClose = () => svg('M4 4l8 8M12 4l-8 8')
+  const IconWarn = () => svg('M8 1.5 15 14H1ZM8 6v3M8 11.5v.5')
+  const IconInfo = () => svg('M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 7v3.5M8 4.5v.5')
+  const IconCheck = () => svg('M3 8.5 6.5 12 13 4')
+
+  // -------------------------------------------------------------------------
+  // Atoms
+  // -------------------------------------------------------------------------
+  function Button({ variant = 'ghost', size = 'md', icon, type = 'button', children, ...rest }) {
+    return h('button', { type, className: `dp-btn dp-btn-${variant} dp-btn-${size}`, ...rest },
+      icon != null && h('span', { className: 'dp-btn-icon' }, icon),
+      children)
+  }
+
+  function Tag({ tone = 'outline', children, ...rest }) {
+    return h('span', { className: 'dp-tag', 'data-tone': tone, ...rest }, children)
+  }
+
+  function Pill({ active = false, onClick, type = 'button', children }) {
+    const cls = `dp-pill${onClick ? ' dp-pill-interactive' : ''}${active ? ' dp-pill-active' : ''}`
+    return h('button', { type, className: cls, onClick }, children)
+  }
+
+  function StateDot({ state = 'idle' }) {
+    if (state === 'ongoing') {
+      return h('svg', { viewBox: '0 0 24 24', width: 16, height: 16, className: 'dp-spinner', 'aria-hidden': true },
+        h('g', { className: 'dp-spinner-motion' },
+          h('circle', { className: 'dp-spinner-track', cx: 12, cy: 12, r: 9 }),
+          h('circle', { className: 'dp-spinner-arc', cx: 12, cy: 12, r: 9 })))
+    }
+    return h('span', { className: 'dp-dot', 'data-state': state, 'aria-hidden': true })
+  }
+
+  function SegmentedTabs({ tabs, value, onChange, ariaLabel }) {
+    const ref = useRef(null)
+    const [ind, setInd] = useState({ x: 0, w: 0 })
+
+    useEffect(() => {
+      const el = ref.current
+      if (!el) return
+      const measure = () => {
+        const sel = el.querySelector('.dp-tab[aria-selected="true"]')
+        if (sel) setInd({ x: sel.offsetLeft, w: sel.offsetWidth })
+      }
+      measure()
+      const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+      if (ro) ro.observe(el)
+      return () => { if (ro) ro.disconnect() }
+    }, [value, tabs])
+
+    return h('div', { className: 'dp-tabs', role: 'tablist', 'aria-label': ariaLabel, ref },
+      h('div', { className: 'dp-tabs-indicator',
+        style: { transform: `translateX(${ind.x - 4}px)`, width: ind.w ? `${ind.w}px` : undefined } }),
+      tabs.map(t => h('button', {
+        key: t.value, role: 'tab', type: 'button',
+        className: 'dp-tab', 'aria-selected': t.value === value,
+        onClick: () => onChange(t.value),
+      }, t.label)))
+  }
+
+  function SearchInput({ value, onChange, placeholder, ...rest }) {
+    return h('div', { className: 'dp-input-wrap' },
+      h('span', { className: 'dp-input-icon' }, h(IconSearch)),
+      h('input', {
+        className: 'dp-input', type: 'text', value, placeholder,
+        onChange: e => onChange(e.target.value), ...rest,
+      }))
+  }
+
+  function Switch({ checked, onChange, disabled, 'aria-label': ariaLabel }) {
+    return h('button', {
+      type: 'button', role: 'switch', className: 'dp-switch',
+      'aria-checked': checked ? 'true' : 'false', 'aria-label': ariaLabel,
+      disabled, onClick: () => { if (!disabled) onChange(!checked) },
+    }, h('span', { className: 'dp-switch-thumb' }))
+  }
+
+  // Modal — focus+Esc+outside-click+restore, copied behavior from primitives
+  function Modal({ open, title, onClose, children, footer, description, size = 'md' }) {
+    const dialogRef = useRef(null)
+    const prevFocus = useRef(null)
+
+    useEffect(() => {
+      if (!open) return
+      prevFocus.current = document.activeElement
+      const el = dialogRef.current
+      if (el) {
+        const f = el.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        ;(f || el).focus?.()
+      }
+      const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
+      document.addEventListener('keydown', onKey, true)
+      return () => {
+        document.removeEventListener('keydown', onKey, true)
+        try { prevFocus.current?.focus?.() } catch { /* ignore */ }
+      }
+    }, [open, onClose])
+
+    if (!open) return null
+    const closeOnBackdrop = (e) => { if (e.target === e.currentTarget) onClose() }
+    return h('div', { className: 'dp-modal-root', onPointerDown: closeOnBackdrop },
+      h('div', { className: 'dp-modal-mask', onPointerDown: closeOnBackdrop }),
+      h('div', {
+        className: 'dp-modal-dialog', 'data-size': size, role: 'dialog', 'aria-modal': 'true',
+        tabIndex: -1, ref: dialogRef,
+      },
+        title && h('div', { className: 'dp-modal-header' },
+          h('h2', { className: 'dp-modal-title' }, title),
+          h('button', { type: 'button', className: 'dp-modal-close', 'aria-label': '关闭', onClick: onClose },
+            h(IconClose))),
+        description && h('p', { className: 'dp-modal-description' }, description),
+        h('div', { className: 'dp-modal-body' }, children),
+        footer && h('div', { className: 'dp-modal-footer' }, footer),
+      ))
+  }
+
+  // useToast — returns { show, node }; render `node` once at the panel root.
+  function useToast() {
+    const [items, setItems] = useState([])
+    const idc = useRef(0)
+    const show = useCallback((text, opts = {}) => {
+      const id = ++idc.current
+      const tone = opts.tone || 'info'
+      const hold = opts.hold || 3000
+      setItems(xs => [...xs, { id, text, tone, hold }])
+      setTimeout(() => setItems(xs => xs.filter(x => x.id !== id)), hold + 1100)
+      return id
+    }, [])
+    const dismiss = useCallback((id) => setItems(xs => xs.filter(x => x.id !== id)), [])
+    const iconFor = (tone) => tone === 'success' ? h(IconCheck) : tone === 'info' ? h(IconInfo) : h(IconWarn)
+    const node = items.map(it =>
+      h('div', { key: it.id, className: 'dp-toast', style: { '--dp-toast-hold': `${it.hold}ms` } },
+        h('span', { className: 'dp-toast-icon', 'data-tone': it.tone }, iconFor(it.tone)),
+        h('span', { className: 'dp-toast-text' }, it.text)))
+    return { show, dismiss, node }
+  }
+
+  function EmptyState({ icon, children }) {
+    return h('div', { className: 'dp-empty' }, icon != null ? h('span', { className: 'dp-empty-icon' }, icon) : null, children)
+  }
+
+  function StatCard({ label, value, tone }) {
+    const valueProps = { className: 'dp-statcard-value' }
+    if (tone) valueProps['data-tone'] = tone
+    return h('div', { className: 'dp-statcard' },
+      h('span', { className: 'dp-statcard-label' }, label),
+      h('span', valueProps, value))
+  }
+
+  function SectionTitle({ children, ...rest }) {
+    return h('h3', { className: 'dp-section-title', ...rest }, children)
+  }
+
+  return {
+    CSS,
+    Button, Tag, Pill, StateDot, SegmentedTabs, SearchInput, Switch,
+    Modal, useToast, EmptyState, StatCard, SectionTitle,
+    icons: { IconSearch, IconClose, IconWarn, IconInfo, IconCheck },
+  }
+}
+
+    const UI = createUiKit(React)
+
     /** 与 Host 的 RPC_PATH 对应；相对路径让 mount 前缀自动生效。 */
     const ROUTE = 'api/boss-panel.rpc'
     /** Client locale 命名空间。 */
@@ -123,11 +434,47 @@ window.__ModuleLoader__.load({
       pendingDrop: '忽略',
       pendingMarked: '已标记',
       pendingFailed: '标记失败：{message}',
+      tabApproval: '审批',
+      statApproval: '待审批',
+      approvalTitle: '首触审批',
+      approvalSub: '你点头，agent 才发',
+      approvalEmpty: '没有待审批的候选人 —— 今日候选都处理完了',
+      approvalStale: '宿主还没加载审批数据 —— index.js 没重载，重启一次 DSH 后这里就会出现候选',
+      approvalSummary: '待批 {pending} · 已通过待发 {approved} · 已发 {sent} · 跳过 {skipped}',
+      approvalApprove: '通过并发送',
+      approvalSkip: '跳过',
+      approvalRevoke: '撤回',
+      approvalApproved: '已通过，agent 发送时会回写结果',
+      approvalSkipped: '已跳过',
+      approvalRevoked: '已撤回为待审批',
+      approvalFailed: '操作失败：{message}',
+      approvalStatusPending: '待审批',
+      approvalStatusApproved: '已通过 · 待发送',
+      approvalStatusSent: '已发送',
+      approvalStatusSkipped: '已跳过',
+      approvalStatusFailed: '发送失败',
+      approvalJd: 'JD 详情',
+      approvalCompany: '公司详情',
+      approvalChat: '聊天记录',
+      approvalChatEmpty: '还没有聊天记录（尚未接触）',
+      approvalDraft: '首触文案',
+      approvalGap: '缺口',
+      approvalEvidence: 'JD 证据',
+      approvalOpenJd: '在 BOSS 打开 JD',
+      approvalRecruiter: '对接人',
       upcoming: '近期面试',
       noUpcoming: '近期没有已安排的面试',
       contactsDays: '最近 14 天首触',
       colWhen: '时间',
       colMode: '形式',
+      dateWarning: '日程与日期不一致，待核实',
+      conflictTitle: '面试日程存在冲突，先核实再行动',
+      agentGuard: '代理护栏',
+      agentGateReady: '事实/简历闸门已启用',
+      agentGateMissing: '闸门文件缺失，需修复',
+      agentResumeBlocked: '简历阻断 {n}',
+      agentScheduleConflict: '日程冲突 {n}',
+      agentTrack: '游戏AI {game} · 研发工具 {tool} · 待核实 {verify} · 错配 {mismatch}',
     }
 
     const en = {
@@ -209,11 +556,47 @@ window.__ModuleLoader__.load({
       pendingDrop: 'Ignore',
       pendingMarked: 'Marked',
       pendingFailed: 'Mark failed: {message}',
+      tabApproval: 'Approval',
+      statApproval: 'To approve',
+      approvalTitle: 'First-touch approval',
+      approvalSub: 'Nothing is sent until you approve',
+      approvalEmpty: 'Nothing to approve — every candidate is handled',
+      approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
+      approvalSummary: 'Waiting {pending} · Approved {approved} · Sent {sent} · Skipped {skipped}',
+      approvalApprove: 'Approve & send',
+      approvalSkip: 'Skip',
+      approvalRevoke: 'Undo',
+      approvalApproved: 'Approved; the agent writes back the result',
+      approvalSkipped: 'Skipped',
+      approvalRevoked: 'Back to waiting',
+      approvalFailed: 'Action failed: {message}',
+      approvalStatusPending: 'Waiting',
+      approvalStatusApproved: 'Approved · queued',
+      approvalStatusSent: 'Sent',
+      approvalStatusSkipped: 'Skipped',
+      approvalStatusFailed: 'Send failed',
+      approvalJd: 'JD detail',
+      approvalCompany: 'Company',
+      approvalChat: 'Conversation',
+      approvalChatEmpty: 'No conversation yet (not contacted)',
+      approvalDraft: 'First-touch draft',
+      approvalGap: 'Gap',
+      approvalEvidence: 'JD evidence',
+      approvalOpenJd: 'Open JD on BOSS',
+      approvalRecruiter: 'Recruiter',
       upcoming: 'Upcoming interviews',
       noUpcoming: 'No interviews scheduled soon',
       contactsDays: 'Outreach in last 14 days',
       colWhen: 'When',
       colMode: 'Mode',
+      dateWarning: 'Schedule date conflict — verify',
+      conflictTitle: 'Interview schedule conflict — verify before acting',
+      agentGuard: 'Agent guard',
+      agentGateReady: 'Fact/resume gates installed',
+      agentGateMissing: 'Gate files missing',
+      agentResumeBlocked: 'Resume blocked: {n}',
+      agentScheduleConflict: 'Schedule conflicts: {n}',
+      agentTrack: 'Game AI {game} · Dev tools {tool} · Verify {verify} · Mismatch {mismatch}',
     }
 
     /** 状态 → 语义色（映射到宿主 state token）。 */
@@ -373,30 +756,15 @@ window.__ModuleLoader__.load({
       .boss-intro { margin: 4px 0 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
       .boss-head-side { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
       .boss-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
-      .boss-btn { appearance: none; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 5px 12px; font-size: 12px; line-height: 18px; cursor: pointer; font-family: inherit; }
-      .boss-btn:hover { background: var(--dsw-alias-bg-layer-2); }
-      .boss-btn:disabled { opacity: .5; cursor: default; }
       .boss-daily { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; line-height: 20px; }
       .boss-daily b { font-variant-numeric: tabular-nums; }
       .boss-daily-sep { color: var(--dsw-alias-label-secondary); margin: 0 6px; }
       .boss-fail { color: var(--dsw-alias-state-warn-primary); }
       .boss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
-      .boss-card { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); border-radius: 10px; padding: 10px 13px; display: flex; flex-direction: column; gap: 2px; }
-      .boss-card-num { font-size: 19px; line-height: 25px; font-weight: 600; font-variant-numeric: tabular-nums; }
-      .boss-card-num[data-kind="warn"] { color: var(--dsw-alias-state-warn-primary); }
-      .boss-card-num[data-kind="error"] { color: var(--dsw-alias-state-error-primary); }
-      .boss-card-num[data-kind="success"] { color: var(--dsw-alias-state-success-primary); }
-      .boss-card-label { font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
-      .boss-section { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 600; margin: 6px 0 0; }
+      .boss-section { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; }
       .boss-section-count { font-size: 12px; font-weight: 400; color: var(--dsw-alias-label-secondary); }
       .boss-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .boss-input { flex: 1 1 200px; min-width: 120px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); border-radius: 8px; padding: 5px 10px; font-size: 12px; line-height: 18px; font-family: inherit; }
-      .boss-input:focus { outline: none; border-color: var(--dsw-alias-brand-primary); }
       .boss-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-      .boss-chip { appearance: none; font-family: inherit; font-size: 12px; line-height: 16px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); cursor: pointer; }
-      .boss-chip:hover { background: var(--dsw-alias-bg-layer-2); }
-      .boss-chip[data-on="true"] { background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
-      .boss-chip-n { opacity: .7; font-variant-numeric: tabular-nums; margin-left: 4px; }
       .boss-table { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
       .boss-tr { display: grid; gap: 10px; align-items: start; padding: 9px 13px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
       .boss-tr:last-child { border-bottom: none; }
@@ -405,32 +773,29 @@ window.__ModuleLoader__.load({
       .boss-th { font-size: 11.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); font-weight: 500; }
       .boss-tr.threads { grid-template-columns: 82px minmax(120px, 1fr) minmax(120px, 1.1fr) minmax(160px, 1.9fr) 96px; }
       .boss-tr.iv { grid-template-columns: minmax(120px, 1.2fr) 84px 84px minmax(110px, 1fr) 70px minmax(90px, .9fr) minmax(110px, 1fr); }
-      .boss-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; line-height: 17px; white-space: nowrap; border: 1px solid transparent; }
-      .boss-badge[data-kind="warn"] { color: var(--dsw-alias-state-warn-primary); border-color: var(--dsw-alias-state-warn-primary); }
-      .boss-badge[data-kind="error"] { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }
-      .boss-badge[data-kind="brand"] { color: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); }
-      .boss-badge[data-kind="success"] { color: var(--dsw-alias-state-success-primary); border-color: var(--dsw-alias-state-success-primary); }
-      .boss-badge[data-kind="idle"] { color: var(--dsw-alias-label-secondary); border-color: var(--dsw-alias-border-l1); }
       .boss-co { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-sub { font-size: 11.5px; line-height: 16px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-      .boss-who { flex: 0 0 auto; font-size: 10.5px; line-height: 15px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
-      .boss-who[data-side="me"] { color: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); }
       .boss-tx { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
       .boss-nx { font-size: 12px; color: var(--dsw-alias-label-secondary); }
       .boss-sal { display: inline-block; margin-left: 6px; font-size: 11.5px; color: var(--dsw-alias-brand-primary); }
       .boss-chipd { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 11px; line-height: 16px; border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); white-space: nowrap; }
       .boss-chipd[data-tone="hot"] { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); font-weight: 600; }
+      .boss-chipd[data-tone="warn"] { color: var(--dsw-alias-state-warn-primary); border-color: var(--dsw-alias-state-warn-primary); }
+      .boss-chipd[data-tone="ok"] { color: var(--dsw-alias-state-success-primary); border-color: var(--dsw-alias-state-success-primary); }
       .boss-chipd[data-tone="past"], .boss-chipd[data-tone="tbd"] { opacity: .7; }
-      .boss-empty { padding: 22px 14px; text-align: center; font-size: 12px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); }
+      .boss-date-warning { display: block; margin-top: 2px; color: var(--dsw-alias-state-warn-primary); font-size: 11px; line-height: 16px; }
+      .boss-conflict-banner { border: 1px solid var(--dsw-alias-state-warn-primary); border-radius: 10px; padding: 11px 14px; color: var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 18px; }
+      .boss-conflict-banner strong { display: block; margin-bottom: 3px; font-size: 12.5px; }
+      .boss-conflict-row { color: var(--dsw-alias-label-primary); }
+      .boss-audit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 9px 12px; background: var(--dsw-alias-bg-layer-1); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11.5px; line-height: 18px; }
+      .boss-audit-title { font-weight: 600; margin-right: 2px; }
+      .boss-audit-note { color: var(--dsw-alias-label-secondary); }
+      .boss-track { display: inline-block; margin-top: 4px; padding: 0 6px; border-radius: 8px; background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 10.5px; line-height: 16px; }
       .boss-error { border: 1px solid var(--dsw-alias-state-error-primary); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--dsw-alias-state-error-primary); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .boss-days { display: flex; gap: 4px; flex-wrap: wrap; }
       .boss-day { border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 2px 8px; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
       .boss-day[data-zero="false"] { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
-      .boss-mask { position: fixed; inset: 0; background: var(--dsw-alias-bg-overlay); z-index: 60; }
-      .boss-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(680px, 92vw); max-height: 82vh; overflow: auto; z-index: 61; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); padding: 16px 20px 20px; }
-      .boss-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-      .boss-modal-title { margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; }
       .boss-kv { display: flex; gap: 8px; font-size: 12.5px; line-height: 19px; }
       .boss-kv-key { flex: 0 0 74px; color: var(--dsw-alias-label-secondary); }
       .boss-kv-val { flex: 1 1 auto; min-width: 0; word-break: break-word; }
@@ -440,11 +805,30 @@ window.__ModuleLoader__.load({
       .boss-cm[data-mine="false"] { margin-right: 32px; }
       .boss-cm-tag { font-size: 10.5px; color: var(--dsw-alias-label-secondary); margin-right: 6px; }
 
+      /* —— 审批卡片 —— */
+      .boss-ap { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+      .boss-ap-summary { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); display: flex; gap: 10px; flex-wrap: wrap; }
+      .boss-ap-notice { color: var(--dsw-alias-brand-primary); }
+      .boss-ap-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+      .boss-ap-card[data-status="approved"] { border-color: var(--dsw-alias-state-success-primary); }
+      .boss-ap-card[data-status="failed"] { border-color: var(--dsw-alias-state-error-primary); }
+      .boss-ap-card[data-status="skipped"] { opacity: .6; }
+      .boss-ap-head { display: flex; flex-direction: column; gap: 3px; }
+      .boss-ap-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .boss-ap-job { font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+      .boss-ap-line { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+      .boss-ap-line b { color: var(--dsw-alias-label-primary); font-weight: 500; }
+      .boss-ap-gap { color: var(--dsw-alias-state-warn-primary); }
+      .boss-ap-result { color: var(--dsw-alias-state-error-primary); }
+      .boss-ap-draft { font-size: 12.5px; line-height: 20px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; word-break: break-word; }
+      .boss-ap-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .boss-ap-spacer { flex: 1 1 auto; }
+      .boss-ap-detail { border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+      .boss-ap-sec { display: flex; flex-direction: column; gap: 4px; }
+      .boss-ap-jd { margin: 0; font-size: 12px; line-height: 19px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
+      .boss-ap-link { font-size: 12px; color: var(--dsw-alias-brand-primary); text-decoration: none; }
+
       /* —— 概览仪表盘 —— */
-      .boss-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--dsw-alias-border-l1); padding-bottom: 0; }
-      .boss-tab { appearance: none; font-family: inherit; font-size: 13px; line-height: 20px; padding: 6px 14px; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; margin-bottom: -1px; }
-      .boss-tab:hover { color: var(--dsw-alias-label-primary); }
-      .boss-tab[data-on="true"] { color: var(--dsw-alias-brand-primary); border-bottom-color: var(--dsw-alias-brand-primary); font-weight: 500; }
       .boss-overview { display: flex; flex-direction: column; gap: 14px; }
       .boss-dist { display: flex; flex-direction: column; gap: 8px; }
       .boss-dist-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--dsw-alias-bg-layer-2); }
@@ -458,12 +842,6 @@ window.__ModuleLoader__.load({
       .boss-dist-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
       .boss-dist-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
       .boss-dist-item b { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); font-weight: 500; }
-      .boss-dist-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-      .boss-dist-dot[data-kind="warn"] { background: var(--dsw-alias-state-warn-primary); }
-      .boss-dist-dot[data-kind="error"] { background: var(--dsw-alias-state-error-primary); }
-      .boss-dist-dot[data-kind="brand"] { background: var(--dsw-alias-brand-primary); }
-      .boss-dist-dot[data-kind="success"] { background: var(--dsw-alias-state-success-primary); }
-      .boss-dist-dot[data-kind="idle"] { background: var(--dsw-alias-border-l2); }
       .boss-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
       .boss-split-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
       .boss-action { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
@@ -474,7 +852,7 @@ window.__ModuleLoader__.load({
       .boss-action-main { min-width: 0; }
       .boss-action-nx { min-width: 0; }
       .boss-action-msg { font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-      .boss-action-empty { border: none; padding: 14px 4px; text-align: left; }
+      .boss-action-empty { padding: 0; }
       .boss-upcoming { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
       .boss-upcoming-row { display: grid; grid-template-columns: 74px minmax(110px, 1.3fr) minmax(90px, 1fr) 62px; gap: 10px; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
       .boss-upcoming-row:last-child { border-bottom: none; }
@@ -483,8 +861,15 @@ window.__ModuleLoader__.load({
       .boss-upcoming-main { min-width: 0; }
     `
 
+    const TAG_TONE = { warn: 'warning', error: 'danger', brand: 'info', success: 'success', idle: 'outline' }
+    const DOT_STATE = { warn: 'warning', error: 'error', brand: 'info', success: 'done', idle: 'idle' }
+
     function StyleTag() {
-      return h('style', { 'data-boss-panel': 'true' }, CSS)
+      return h(
+        React.Fragment,
+        null,
+        h('style', { key: 'boss-panel-css', 'data-boss-panel': 'true' }, UI.CSS + '\n' + CSS),
+      )
     }
 
     // -------------------------------------------------------------------------
@@ -552,55 +937,46 @@ window.__ModuleLoader__.load({
       const msgs = data.msgs ?? []
 
       return h(
-        React.Fragment,
-        null,
-        h('div', { className: 'boss-mask', onClick: onClose }),
+        UI.Modal,
+        {
+          open: true,
+          title: company,
+          size: 'lg',
+          onClose,
+          footer: h(UI.Button, { variant: 'outline', onClick: onClose }, t('close')),
+        },
+        state.loading ? h(UI.EmptyState, null, t('loading')) : null,
+        state.error
+          ? h('div', { className: 'boss-error' }, t('detailFailed', { message: state.error }))
+          : null,
+        rows.length
+          ? h(
+              'div',
+              null,
+              rows.map(([key, value]) =>
+                h(
+                  'div',
+                  { key, className: 'boss-kv' },
+                  h('span', { className: 'boss-kv-key' }, t(key)),
+                  h('span', { className: 'boss-kv-val' }, String(value)),
+                ),
+              ),
+            )
+          : null,
+        h(UI.SectionTitle, { style: { marginTop: 14 } }, t('chat')),
         h(
           'div',
-          { className: 'boss-modal', role: 'dialog', 'aria-label': t('detailTitle') },
-          h(
-            'div',
-            { className: 'boss-modal-head' },
-            h('h3', { className: 'boss-modal-title' }, company),
-            h('button', { type: 'button', className: 'boss-btn', onClick: onClose }, t('close')),
-          ),
-          state.loading ? h('div', { className: 'boss-empty' }, t('loading')) : null,
-          state.error
-            ? h('div', { className: 'boss-error' }, t('detailFailed', { message: state.error }))
-            : null,
-          rows.length
-            ? h(
-                'div',
-                null,
-                rows.map(([key, value]) =>
-                  h(
-                    'div',
-                    { key, className: 'boss-kv' },
-                    h('span', { className: 'boss-kv-key' }, t(key)),
-                    h('span', { className: 'boss-kv-val' }, String(value)),
-                  ),
+          { className: 'boss-chat' },
+          msgs.length
+            ? msgs.map((item, index) =>
+                h(
+                  'div',
+                  { key: index, className: 'boss-cm', 'data-mine': item.mine ? 'true' : 'false' },
+                  h('span', { className: 'boss-cm-tag' }, item.mine ? t('fromMe') : t('fromThem')),
+                  item.text,
                 ),
               )
-            : null,
-          h('div', { className: 'boss-section', style: { marginTop: 14 } }, t('chat')),
-          h(
-            'div',
-            { className: 'boss-chat' },
-            msgs.length
-              ? msgs.map((item, index) =>
-                  h(
-                    'div',
-                    {
-                      key: index,
-                      className: 'boss-cm',
-                      'data-mine': item.mine ? 'true' : 'false',
-                    },
-                    h('span', { className: 'boss-cm-tag' }, item.mine ? t('fromMe') : t('fromThem')),
-                    item.text,
-                  ),
-                )
-              : h('div', { className: 'boss-cm', 'data-mine': 'false' }, t('chatEmpty')),
-          ),
+            : h('div', { className: 'boss-cm', 'data-mine': 'false' }, t('chatEmpty')),
         ),
       )
     }
@@ -635,15 +1011,7 @@ window.__ModuleLoader__.load({
           'data-clickable': 'true',
           onClick: () => onOpen(item.company),
         },
-        h(
-          'span',
-          null,
-          h(
-            'span',
-            { className: 'boss-badge', 'data-kind': STATE_KIND[item.state] ?? 'idle' },
-            item.state,
-          ),
-        ),
+        h('span', null, h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state)),
         h(
           'span',
           null,
@@ -659,6 +1027,7 @@ window.__ModuleLoader__.load({
                 { className: 'boss-sub', style: { color: 'inherit', fontSize: '12px' }, title: item.job },
                 item.job,
                 item.salary ? h('span', { className: 'boss-sal' }, item.salary) : null,
+                item.track ? h('span', { className: 'boss-track', title: item.track.evidence }, item.track.label) : null,
               )
             : h('span', { className: 'boss-sub' }, t('jobHint')),
         ),
@@ -668,7 +1037,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'boss-line' },
-            h('span', { className: 'boss-who', 'data-side': side }, sideLabel),
+            h(UI.Tag, { tone: side === 'me' ? 'info' : 'outline' }, sideLabel),
             h('span', { className: 'boss-tx', title: item.last }, clip(item.last)),
           ),
           meta ? h('div', { className: 'boss-sub' }, meta) : null,
@@ -685,10 +1054,54 @@ window.__ModuleLoader__.load({
         h('span', null, h('div', { className: 'boss-co' }, item.company), h('span', { className: 'boss-chipd', 'data-tone': chip.tone }, chip.text)),
         h('span', { className: 'boss-sub' }, item.who || '—'),
         h('span', { className: 'boss-sub' }, item.job || '—'),
-        h('span', { className: 'boss-sub' }, item.when || '—'),
+        h('span', { className: 'boss-sub' }, item.when || '—', item.dateWarning ? h('span', { className: 'boss-date-warning' }, `${t('dateWarning')}：${item.dateWarning}`) : null),
         h('span', { className: 'boss-sub' }, item.mode || '—'),
         h('span', { className: 'boss-sub' }, item.state || '—'),
         h('span', { className: 'boss-nx' }, item.next || '—'),
+      )
+    }
+
+    function AgentAuditStrip({ audit, t }) {
+      if (!audit) return null
+      const track = audit.trackCounts || {}
+      const gateOk = audit.factGateInstalled && audit.resumeGateInstalled
+      const blocked = audit.blockedResumes || []
+      const conflicts = audit.scheduleConflicts || []
+      const blockedTitle = blocked.length
+        ? blocked.map((item) => `${item.name}：${item.reason}`).join('\n')
+        : ''
+      const conflictTitle = conflicts.length
+        ? conflicts.map((item) => `${item.company}｜${item.when}：${item.warning}`).join('\n')
+        : ''
+      return h(
+        'div',
+        { className: 'boss-audit', 'aria-label': t('agentGuard') },
+        h('span', { className: 'boss-audit-title' }, t('agentGuard')),
+        h(
+          'span',
+          { className: 'boss-chipd', 'data-tone': gateOk ? 'ok' : 'hot' },
+          gateOk ? t('agentGateReady') : t('agentGateMissing'),
+        ),
+        h(
+          'span',
+          { className: 'boss-chipd', 'data-tone': blocked.length ? 'warn' : 'ok', title: blockedTitle },
+          t('agentResumeBlocked', { n: blocked.length }),
+        ),
+        h(
+          'span',
+          { className: 'boss-chipd', 'data-tone': conflicts.length ? 'hot' : 'ok', title: conflictTitle },
+          t('agentScheduleConflict', { n: conflicts.length }),
+        ),
+        h(
+          'span',
+          { className: 'boss-audit-note' },
+          t('agentTrack', {
+            game: track.GAME_AI ?? 0,
+            tool: track.GAME_DEV_TOOL ?? 0,
+            verify: track.UNVERIFIED ?? 0,
+            mismatch: track.MISMATCH ?? 0,
+          }),
+        ),
       )
     }
 
@@ -729,7 +1142,7 @@ window.__ModuleLoader__.load({
             h(
               'span',
               { key: entry.state, className: 'boss-dist-item' },
-              h('i', { className: 'boss-dist-dot', 'data-kind': STATE_KIND[entry.state] ?? 'idle' }),
+              h(UI.StateDot, { state: DOT_STATE[STATE_KIND[entry.state] ?? 'idle'] }),
               entry.state,
               h('b', null, String(entry.count)),
             ),
@@ -745,7 +1158,7 @@ window.__ModuleLoader__.load({
         (item) => item.state === '待你决定',
       )
       if (!rows.length) {
-        return h('div', { className: 'boss-empty boss-action-empty' }, t('actionEmpty'))
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('actionEmpty')))
       }
       return h(
         'div',
@@ -759,11 +1172,7 @@ window.__ModuleLoader__.load({
               'data-clickable': 'true',
               onClick: () => onOpen(item.company),
             },
-            h(
-              'span',
-              { className: 'boss-badge', 'data-kind': STATE_KIND[item.state] ?? 'idle' },
-              item.state,
-            ),
+            h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state),
             h(
               'div',
               { className: 'boss-action-main' },
@@ -785,7 +1194,7 @@ window.__ModuleLoader__.load({
     function PendingRows({ items, t, onOpen, onMark }) {
       const rows = items ?? []
       if (!rows.length) {
-        return h('div', { className: 'boss-empty boss-action-empty' }, t('pendingEmpty'))
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('pendingEmpty')))
       }
       return h(
         'div',
@@ -795,8 +1204,8 @@ window.__ModuleLoader__.load({
             'div',
             { key: item.id, className: 'boss-action-row boss-pending-row' },
             h(
-              'span',
-              { className: 'boss-badge', 'data-kind': 'pending' },
+              UI.Tag,
+              { tone: 'info' },
               item.conf === null ? 'review' : String(Math.round(item.conf * 100) / 100),
             ),
             h(
@@ -821,25 +1230,227 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'boss-pending-acts' },
               h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'boss-btn boss-btn-mini',
-                  onClick: () => onMark(item.id, 'sent'),
-                },
+                UI.Button,
+                { variant: 'outline', size: 'sm', onClick: () => onMark(item.id, 'sent') },
                 t('pendingSent'),
               ),
               h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'boss-btn boss-btn-mini',
-                  onClick: () => onMark(item.id, 'dismissed'),
-                },
+                UI.Button,
+                { variant: 'outline', size: 'sm', onClick: () => onMark(item.id, 'dismissed') },
                 t('pendingDrop'),
               ),
             ),
           ),
+        ),
+      )
+    }
+
+    /**
+     * 审批卡片：一条候选 = 一个卡片。
+     *
+     * 2026-10-28 用户要求「面板上加聊天记录、JD 详情、公司详情，给我审批按钮，
+     * 我切换状态，你检测到能发就发」。所以卡片默认只显示判断依据（证据/缺口/草稿），
+     * 点「展开」才去拉 JD 正文、公司信息与完整聊天记录 —— 轮询不背这些大文本。
+     */
+    const APPROVAL_TONE = {
+      pending: 'info',
+      approved: 'success',
+      sent: 'outline',
+      skipped: 'outline',
+      failed: 'danger',
+    }
+    const APPROVAL_LABEL = {
+      pending: 'approvalStatusPending',
+      approved: 'approvalStatusApproved',
+      sent: 'approvalStatusSent',
+      skipped: 'approvalStatusSkipped',
+      failed: 'approvalStatusFailed',
+    }
+
+    function ApprovalCard({ item, t, onDecide, busy }) {
+      const [open, setOpen] = React.useState(false)
+      const [detail, setDetail] = React.useState({ loading: false, data: null, error: null })
+
+      React.useEffect(() => {
+        if (!open || detail.data || detail.loading) return undefined
+        let alive = true
+        setDetail({ loading: true, data: null, error: null })
+        void callHost({ op: 'approval_detail', id: item.id })
+          .then((value) => {
+            if (alive) setDetail({ loading: false, data: value, error: null })
+          })
+          .catch((error) => {
+            if (alive) setDetail({ loading: false, data: null, error: error?.message || String(error) })
+          })
+        return () => {
+          alive = false
+        }
+      }, [open, item.id])
+
+      const data = detail.data ?? {}
+      const meta = [item.salary, item.city, item.recruiter ? `${item.recruiter}${item.recruiterTitle ? `/${item.recruiterTitle}` : ''}` : '']
+        .filter(Boolean)
+        .join(' · ')
+      const companyRows = [
+        ['industry', data.companyDetail?.industry],
+        ['scale', data.companyDetail?.scale],
+        ['stage', data.companyDetail?.stage],
+        ['city', data.companyDetail?.city],
+        ['first', data.companyDetail?.contactedBefore],
+        ['channel', data.companyDetail?.channel],
+        ['ab', data.companyDetail?.tag],
+        ['note', data.companyDetail?.note],
+      ].filter(([, value]) => value)
+      const msgs = data.msgs ?? []
+      const actions = []
+      if (item.status === 'pending') {
+        actions.push(
+          h(
+            UI.Button,
+            { size: 'sm', disabled: busy, onClick: () => onDecide(item, 'approved') },
+            t('approvalApprove'),
+          ),
+          h(
+            UI.Button,
+            { variant: 'outline', size: 'sm', disabled: busy, onClick: () => onDecide(item, 'skipped') },
+            t('approvalSkip'),
+          ),
+        )
+      } else if (item.status === 'approved' || item.status === 'failed' || item.status === 'skipped') {
+        actions.push(
+          h(
+            UI.Button,
+            { variant: 'outline', size: 'sm', disabled: busy, onClick: () => onDecide(item, 'pending') },
+            t('approvalRevoke'),
+          ),
+        )
+      }
+
+      return h(
+        'div',
+        { className: 'boss-ap-card', 'data-status': item.status },
+        h(
+          'div',
+          { className: 'boss-ap-head' },
+          h(
+            'div',
+            { className: 'boss-ap-title' },
+            h('span', { className: 'boss-co', title: item.company }, item.company),
+            h('span', { className: 'boss-ap-job' }, item.jobTitle || '—'),
+            item.tier ? h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier) : null,
+            h(UI.Tag, { tone: APPROVAL_TONE[item.status] ?? 'outline' }, t(APPROVAL_LABEL[item.status] ?? 'approvalStatusPending')),
+          ),
+          meta ? h('div', { className: 'boss-sub' }, meta) : null,
+        ),
+        item.evidence ? h('div', { className: 'boss-ap-line' }, h('b', null, `${t('approvalEvidence')}：`), item.evidence) : null,
+        item.gap ? h('div', { className: 'boss-ap-line boss-ap-gap' }, h('b', null, `${t('approvalGap')}：`), item.gap) : null,
+        h('div', { className: 'boss-ap-draft', title: item.draft }, item.draft || '—'),
+        item.sendResult && item.sendResult.status
+          ? h('div', { className: 'boss-ap-line boss-ap-result' }, `${item.sendResult.status} · ${item.sendResult.at || ''} ${item.sendResult.detail || ''}`)
+          : null,
+        h(
+          'div',
+          { className: 'boss-ap-acts' },
+          h(
+            UI.Button,
+            { variant: 'ghost', size: 'sm', onClick: () => setOpen((prev) => !prev) },
+            open ? `▾ ${t('approvalJd')}` : `▸ ${t('approvalJd')} / ${t('approvalCompany')} / ${t('approvalChat')}`,
+          ),
+          h('span', { className: 'boss-ap-spacer' }),
+          actions,
+        ),
+        open
+          ? h(
+              'div',
+              { className: 'boss-ap-detail' },
+              detail.loading ? h(UI.EmptyState, null, t('loading')) : null,
+              detail.error ? h('div', { className: 'boss-error' }, t('detailFailed', { message: detail.error })) : null,
+              !detail.loading && !detail.error
+                ? h(
+                    React.Fragment,
+                    null,
+                    h(
+                      'div',
+                      { className: 'boss-ap-sec' },
+                      h(UI.SectionTitle, null, t('approvalCompany')),
+                      companyRows.length
+                        ? companyRows.map(([key, value]) =>
+                            h(
+                              'div',
+                              { key, className: 'boss-kv' },
+                              h('span', { className: 'boss-kv-key' }, t(key)),
+                              h('span', { className: 'boss-kv-val' }, String(value)),
+                            ),
+                          )
+                        : h('div', { className: 'boss-sub' }, '—'),
+                    ),
+                    h(
+                      'div',
+                      { className: 'boss-ap-sec' },
+                      h(UI.SectionTitle, null, t('approvalJd')),
+                      data.jdText
+                        ? h('pre', { className: 'boss-ap-jd' }, data.jdText)
+                        : h('div', { className: 'boss-sub' }, '—'),
+                      data.jdUrl
+                        ? h(
+                            'a',
+                            { className: 'boss-ap-link', href: data.jdUrl, target: '_blank', rel: 'noreferrer' },
+                            t('approvalOpenJd'),
+                          )
+                        : null,
+                    ),
+                    h(
+                      'div',
+                      { className: 'boss-ap-sec' },
+                      h(UI.SectionTitle, null, t('approvalChat')),
+                      msgs.length
+                        ? h(
+                            'div',
+                            { className: 'boss-chat' },
+                            msgs.map((entry, index) =>
+                              h(
+                                'div',
+                                { key: index, className: 'boss-cm', 'data-mine': entry.mine ? 'true' : 'false' },
+                                h('span', { className: 'boss-cm-tag' }, entry.mine ? t('fromMe') : t('fromThem')),
+                                entry.text,
+                              ),
+                            ),
+                          )
+                        : h('div', { className: 'boss-sub' }, t('approvalChatEmpty')),
+                    ),
+                  )
+                : null,
+            )
+          : null,
+      )
+    }
+
+    function ApprovalTab({ approvals, t, onDecide, busyId, notice }) {
+      const items = approvals?.items ?? []
+      const stats = approvals?.stats ?? {}
+      // 旧宿主（index.js 未重载）的快照里没有 approvals 字段：显式说清楚，别让人误以为是空池。
+      if (!approvals) {
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalStale')))
+      }
+      if (!items.length) {
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('approvalEmpty')))
+      }
+      return h(
+        'div',
+        { className: 'boss-ap' },
+        h(
+          'div',
+          { className: 'boss-ap-summary' },
+          t('approvalSummary', {
+            pending: stats.pending ?? 0,
+            approved: stats.approved ?? 0,
+            sent: stats.sent ?? 0,
+            skipped: stats.skipped ?? 0,
+          }),
+          notice ? h('span', { className: 'boss-ap-notice' }, notice) : null,
+        ),
+        items.map((item) =>
+          h(ApprovalCard, { key: item.id, item, t, onDecide, busy: busyId === item.id }),
         ),
       )
     }
@@ -850,7 +1461,7 @@ window.__ModuleLoader__.load({
         (item) => item.dayDiff === null || item.dayDiff >= 0,
       )
       if (!upcoming.length) {
-        return h('div', { className: 'boss-empty boss-action-empty' }, t('noUpcoming'))
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('noUpcoming')))
       }
       return h(
         'div',
@@ -872,7 +1483,7 @@ window.__ModuleLoader__.load({
               h('div', { className: 'boss-co', title: item.company }, item.company || '—'),
               h('div', { className: 'boss-sub' }, item.job || item.who || '—'),
             ),
-            h('span', { className: 'boss-sub' }, item.when || '—'),
+            h('span', { className: 'boss-sub' }, item.when || '—', item.dateWarning ? h('span', { className: 'boss-date-warning' }, t('dateWarning')) : null),
             h('span', { className: 'boss-sub' }, item.mode || '—'),
           )
         }),
@@ -881,27 +1492,12 @@ window.__ModuleLoader__.load({
 
     function TabBar({ tab, setTab, t }) {
       const tabs = [
-        { key: 'overview', label: t('tabOverview') },
-        { key: 'interviews', label: t('tabInterview') },
-        { key: 'threads', label: t('tabThreads') },
+        { value: 'approval', label: t('tabApproval') },
+        { value: 'overview', label: t('tabOverview') },
+        { value: 'interviews', label: t('tabInterview') },
+        { value: 'threads', label: t('tabThreads') },
       ]
-      return h(
-        'div',
-        { className: 'boss-tabs' },
-        tabs.map((tab_) =>
-          h(
-            'button',
-            {
-              key: tab_.key,
-              type: 'button',
-              className: 'boss-tab',
-              'data-on': tab === tab_.key ? 'true' : 'false',
-              onClick: () => setTab(tab_.key),
-            },
-            tab_.label,
-          ),
-        ),
-      )
+      return h(UI.SegmentedTabs, { tabs, value: tab, onChange: setTab })
     }
 
     // -------------------------------------------------------------------------
@@ -914,12 +1510,18 @@ window.__ModuleLoader__.load({
       const t = props.t
       // props.initialTab 只给测试用：面板分 tab 渲染，单次渲染只能覆盖一个 tab，
       // 测试需要跑三遍才能断言三个区块都在（否则会误报 RENDER INCOMPLETE）。
-      const [tab, setTab] = React.useState(props.initialTab ?? 'overview')
+      // 有待审批的候选时默认停在审批 Tab（2026-10-28：用户要的是「点一下就发」，
+      // 打开面板先看到待办，而不是概览）。
+      const [tab, setTab] = React.useState(
+        () => props.initialTab ?? ((snapshot.data?.approvals?.stats?.pending ?? 0) > 0 ? 'approval' : 'overview'),
+      )
       const [query, setQuery] = React.useState('')
       const [picked, setPicked] = React.useState([])
       const [openCompany, setOpenCompany] = React.useState(null)
       const [pendingHidden, setPendingHidden] = React.useState(() => new Set())
       const [notice, setNotice] = React.useState('')
+      const [approvalNotice, setApprovalNotice] = React.useState('')
+      const [approvalBusyId, setApprovalBusyId] = React.useState('')
 
       const data = snapshot.data
       const loading = snapshot.loading && !data
@@ -944,6 +1546,11 @@ window.__ModuleLoader__.load({
       const pending = data?.pending ?? []
 
       const cards = [
+        {
+          label: t('statApproval'),
+          value: String(data?.approvals?.stats?.pending ?? 0),
+          kind: (data?.approvals?.stats?.pending ?? 0) > 0 ? 'warn' : null,
+        },
         { label: t('statThreads'), value: counts.threads ?? 0, kind: null },
         { label: t('statPending'), value: counts.pending ?? 0, kind: null },
         { label: t('statDecide'), value: byState['待你决定'] ?? 0, kind: 'warn' },
@@ -958,6 +1565,7 @@ window.__ModuleLoader__.load({
       ]
 
       const interviews = data?.interviews ?? []
+      const conflictInterviews = interviews.filter((item) => item.dateWarning)
       const open = (company) => setOpenCompany(company)
 
       // 队列回写：标记已发/忽略后立刻本地剔除（不等下一轮轮询），失败则提示。
@@ -969,6 +1577,26 @@ window.__ModuleLoader__.load({
           await props.refresh?.()
         } catch (error) {
           setNotice(t('pendingFailed', { message: error?.message || String(error) }))
+        }
+      }
+
+      // 审批回写：只改本地状态机，不触发发送 —— 发送由 agent 侧 runner 轮询 approved 完成。
+      const decideApproval = async (item, status) => {
+        setApprovalBusyId(item.id)
+        try {
+          await callHost({ op: 'approval_decide', id: item.id, status })
+          setApprovalNotice(
+            status === 'approved'
+              ? t('approvalApproved')
+              : status === 'skipped'
+                ? t('approvalSkipped')
+                : t('approvalRevoked'),
+          )
+          await props.refresh?.()
+        } catch (error) {
+          setApprovalNotice(t('approvalFailed', { message: error?.message || String(error) }))
+        } finally {
+          setApprovalBusyId('')
         }
       }
 
@@ -999,10 +1627,10 @@ window.__ModuleLoader__.load({
                   : t('noUpdated'),
               ),
               h(
-                'button',
+                UI.Button,
                 {
-                  type: 'button',
-                  className: 'boss-btn',
+                  variant: 'outline',
+                  size: 'sm',
                   onClick: () => void props.refresh(),
                   disabled: snapshot.loading,
                 },
@@ -1017,17 +1645,55 @@ window.__ModuleLoader__.load({
                 { className: 'boss-error' },
                 h('span', null, t('loadFailed', { message: snapshot.error })),
                 h(
-                  'button',
-                  { type: 'button', className: 'boss-btn', onClick: () => void props.refresh() },
+                  UI.Button,
+                  { variant: 'outline', size: 'sm', onClick: () => void props.refresh() },
                   t('retry'),
                 ),
               )
             : null,
 
-          loading ? h('div', { className: 'boss-empty' }, t('loading')) : null,
-          !loading && !data ? h('div', { className: 'boss-empty' }, t('empty')) : null,
+          conflictInterviews.length
+            ? h(
+                'div',
+                { className: 'boss-conflict-banner', role: 'alert' },
+                h('strong', null, t('conflictTitle')),
+                conflictInterviews.map((item, index) =>
+                  h(
+                    'div',
+                    { key: `${item.company}|conflict|${index}`, className: 'boss-conflict-row' },
+                    `${item.company || '—'}｜${item.when || item.date || '—'}：${item.dateWarning}`,
+                  ),
+                ),
+              )
+            : null,
+
+          !loading && data ? h(AgentAuditStrip, { audit: data.agentAudit, t }) : null,
+
+          loading ? h(UI.EmptyState, null, t('loading')) : null,
+          !loading && !data ? h(UI.EmptyState, null, t('empty')) : null,
 
           !loading && data ? h(TabBar, { tab, setTab, t }) : null,
+
+          // —— 审批：你点头，agent 才发 ——
+          !loading && data && tab === 'approval'
+            ? h(
+                'div',
+                null,
+                h(
+                  'div',
+                  { className: 'boss-section' },
+                  h(UI.SectionTitle, null, t('approvalTitle')),
+                  h('span', { className: 'boss-section-count' }, t('approvalSub')),
+                ),
+                h(ApprovalTab, {
+                  approvals: data.approvals,
+                  t,
+                  onDecide: decideApproval,
+                  busyId: approvalBusyId,
+                  notice: approvalNotice,
+                }),
+              )
+            : null,
 
           // —— 概览：仪表盘 ——
           !loading && data && tab === 'overview'
@@ -1085,16 +1751,19 @@ window.__ModuleLoader__.load({
                   'div',
                   { className: 'boss-cards' },
                   cards.map((card) =>
-                    h(
-                      'div',
-                      { key: card.label, className: 'boss-card' },
-                      h(
-                        'span',
-                        { className: 'boss-card-num', 'data-kind': card.kind ?? undefined },
-                        String(card.value),
-                      ),
-                      h('span', { className: 'boss-card-label' }, card.label),
-                    ),
+                    h(UI.StatCard, {
+                      key: card.label,
+                      label: card.label,
+                      value: String(card.value),
+                      tone:
+                        card.kind === 'warn'
+                          ? 'warning'
+                          : card.kind === 'error'
+                            ? 'danger'
+                            : card.kind === 'success'
+                              ? 'success'
+                              : undefined,
+                    }),
                   ),
                 ),
                 pending.filter((item) => !pendingHidden.has(item.id)).length
@@ -1104,7 +1773,7 @@ window.__ModuleLoader__.load({
                       h(
                         'div',
                         { className: 'boss-section' },
-                        t('pendingTitle'),
+                        h(UI.SectionTitle, null, t('pendingTitle')),
                         h('span', { className: 'boss-section-count' }, t('pendingSub')),
                       ),
                       h(PendingRows, {
@@ -1115,7 +1784,7 @@ window.__ModuleLoader__.load({
                       }),
                     )
                   : null,
-                h('div', { className: 'boss-section' }, t('stateDist')),
+                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('stateDist'))),
                 h(StateBar, { byState, t }),
                 h(
                   'div',
@@ -1126,7 +1795,7 @@ window.__ModuleLoader__.load({
                     h(
                       'div',
                       { className: 'boss-section' },
-                      t('actionTitle'),
+                      h(UI.SectionTitle, null, t('actionTitle')),
                       h('span', { className: 'boss-section-count' }, t('actionSub')),
                     ),
                     h(ActionRows, { threads: data.threads ?? [], t, onOpen: open }),
@@ -1134,11 +1803,11 @@ window.__ModuleLoader__.load({
                   h(
                     'div',
                     { className: 'boss-split-col' },
-                    h('div', { className: 'boss-section' }, t('upcoming')),
+                    h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('upcoming'))),
                     h(UpcomingList, { interviews, t, onOpen: open }),
                   ),
                 ),
-                h('div', { className: 'boss-section' }, t('contactsDays')),
+                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('contactsDays'))),
                 h(
                   'div',
                   { className: 'boss-days', style: { marginTop: 6 } },
@@ -1166,7 +1835,7 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { className: 'boss-section' },
-                  t('sectionInterview'),
+                  h(UI.SectionTitle, null, t('sectionInterview')),
                   h('span', { className: 'boss-section-count' }, String(interviews.length)),
                 ),
                 h(
@@ -1188,8 +1857,8 @@ window.__ModuleLoader__.load({
                         h(InterviewRow, { key: `${item.company}|${index}`, item, t }),
                       )
                     : h(
-                        'div',
-                        { className: 'boss-empty', style: { border: 'none', borderRadius: 0 } },
+                        UI.EmptyState,
+                        null,
                         t('interviewEmpty'),
                         data.interviewEmptyTail ? `；${data.interviewEmptyTail}` : '',
                       ),
@@ -1205,7 +1874,7 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { className: 'boss-section' },
-                  t('sectionThreads'),
+                  h(UI.SectionTitle, null, t('sectionThreads')),
                   h(
                     'span',
                     { className: 'boss-section-count' },
@@ -1215,23 +1884,16 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { className: 'boss-toolbar' },
-                  h('input', {
-                    className: 'boss-input',
-                    type: 'search',
+                  h(UI.SearchInput, {
                     value: query,
+                    onChange: setQuery,
                     placeholder: t('search'),
-                    onChange: (event) => setQuery(event.target.value),
                   }),
                   h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'boss-chip',
-                      'data-on': picked.length === 0 ? 'true' : 'false',
-                      onClick: () => setPicked([]),
-                    },
+                    UI.Pill,
+                    { active: picked.length === 0, onClick: () => setPicked([]) },
                     t('filterAll'),
-                    h('span', { className: 'boss-chip-n' }, String(counts.threads ?? 0)),
+                    h('span', null, String(counts.threads ?? 0)),
                   ),
                 ),
                 h(
@@ -1239,16 +1901,14 @@ window.__ModuleLoader__.load({
                   { className: 'boss-chips' },
                   ORDER.map((state) =>
                     h(
-                      'button',
+                      UI.Pill,
                       {
                         key: state,
-                        type: 'button',
-                        className: 'boss-chip',
-                        'data-on': pickedSet.has(state) ? 'true' : 'false',
+                        active: pickedSet.has(state),
                         onClick: () => togglePick(state),
                       },
                       state,
-                      h('span', { className: 'boss-chip-n' }, String(byState[state] ?? 0)),
+                      h('span', null, String(byState[state] ?? 0)),
                     ),
                   ),
                 ),
@@ -1265,11 +1925,7 @@ window.__ModuleLoader__.load({
                           onOpen: setOpenCompany,
                         }),
                       )
-                    : h(
-                        'div',
-                        { className: 'boss-empty', style: { border: 'none', borderRadius: 0 } },
-                        t('noMatch'),
-                      ),
+                    : h(UI.EmptyState, null, t('noMatch')),
                 ),
               )
             : null,

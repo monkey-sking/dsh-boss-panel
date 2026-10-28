@@ -69,6 +69,7 @@ const store = {
 function build() {
   seq = 0
   return panel.Comp({
+    initialTab: 'overview',
     useSnapshot: (f) => f(store.getSnapshot()),
     t: (k, vars) => (vars ? `${k}(${JSON.stringify(vars)})` : k),
     lang: 'zh',
@@ -85,7 +86,8 @@ function walk(node, texts, classes) {
   if (Array.isArray(node)) { node.forEach((n) => walk(n, texts, classes)); return }
   if (typeof node === 'string' || typeof node === 'number') { texts.push(String(node)); return }
   if (node && typeof node === 'object' && typeof node.type === 'function') {
-    return walk(node.type(node.props), texts, classes)
+    const kids = node.children.length <= 1 ? node.children[0] : node.children
+    return walk(node.type({ ...node.props, children: kids }), texts, classes)
   }
   if (node && typeof node === 'object' && node.props) {
     const cls = node.props.className
@@ -106,7 +108,8 @@ function find(node, pred) {
     return null
   }
   if (typeof node.type === 'function') {
-    const hit = find(node.type(node.props), pred)
+    const kids = node.children.length <= 1 ? node.children[0] : node.children
+    const hit = find(node.type({ ...node.props, children: kids }), pred)
     if (hit) return hit
   }
   if (node.props) {
@@ -130,12 +133,17 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   walk(tree, texts, classes)
   const joined = texts.join(' | ')
   check('TabBar 概览/面试/会话', ['tabOverview','tabInterview','tabThreads'].every(k=>joined.includes(k)))
+  check('代理护栏状态条', classes.has('boss-audit') && joined.includes('agentGuard'))
   check('今日简报', joined.includes('dailyDecide'))
   // 「已读不回」卡 2026-10-27 移除（该桶随 48h 超时规则归零）。
   check('6 张统计卡', ['statThreads','statDecide','statInterview','statOutreach','statAB'].every(k=>joined.includes(k)))
-  check('状态分布条', classes.has('boss-dist') && classes.has('boss-dist-bar'))
+  // 空数据目录没有状态可画；真实快照有线程时必须出现分布条。
+  check(
+    '状态分布条',
+    snap.counts.threads === 0 || (classes.has('boss-dist') && classes.has('boss-dist-bar')),
+  )
   // 2026-10-27 起「已读不回」超 48h 并入已结束（用户：超时不管），
-  // 待你决定+已读不回 都为 0 时渲染的是空态 .boss-action-empty（带 boss-empty），
+  // 待你决定+已读不回 都为 0 时渲染的是空态 .boss-action-empty（内含 UI.EmptyState/.dp-empty），
   // 所以这里两种都算通过。
   check('需要行动区', classes.has('boss-action') || classes.has('boss-action-empty'))
   check('近期面试区', classes.has('boss-upcoming') || joined.includes('noUpcoming'))
@@ -178,3 +186,4 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
 }
 
 console.log(ok ? 'RENDER OK' : 'RENDER INCOMPLETE')
+process.exit(ok ? 0 : 1)

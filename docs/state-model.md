@@ -67,3 +67,25 @@
 | `boss_handled.json` | 人工复核结论（`boss_mark.py` 写，签名失效自动作废） |
 | `company_meta.json` | 公司调研（外包/黑名单判断） |
 | `outsourcing_blacklist.json` | 外包黑名单 |
+
+## 七、首触审批状态机（2026-10-28）
+
+来源：用户在面板上点按钮决定「这条草稿发不发」，agent 只执行、不再问。
+
+```
+        ┌── pending ──┬── approved ──→ sent      (发送成功/已在聊)
+        │             │       └─────→ failed    (闸门挡下/找不到会话/输入框缺失)
+   (撤回) └─────────────┘── skipped
+```
+
+- **pending**：agent 刚写的候选，面板显示「通过并发送 / 跳过」。
+- **approved**：用户点了通过（写 `approvedAt`）。此后 10 分钟内会被 `boss_approval_runner.py` 捞走。
+- **skipped**：用户主动跳过，不再出现在默认排序前面。
+- **sent / failed**：只有发送侧（`boss_approvals.py settle`）能写，面板只能「撤回」回 pending。
+- 撤回语义：用户点「撤回」= 把 approved/skipped/failed 退回 pending，已发出的（sent）不回退，
+  避免把真实外发记录改成未外发。
+
+三道一致性约束：
+1. `draftHash` 必须仍等于当前 `draft` 的哈希——用户看过的那段文字才允许发出去。
+2. 首触必须有 `jobId` 与 `jdText`（`boss_shortlist_gate.py` 硬要求）。
+3. `fact_blocked` 时状态落 failed，草稿原样保留，供人工改后再放回 pending。

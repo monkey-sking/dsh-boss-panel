@@ -206,6 +206,15 @@ function daysSince(text, today) {
   if (/^\d{1,2}:\d{2}$/.test(value)) return 0
   if (value.startsWith('昨天')) return 1
   if (value.startsWith('前天')) return 2
+  // 2026-10-28：BOSS 旧行常写成「10月23日」，原正则只认「10-23」，
+  // 导致这些行 days=null，48h / 7 天 / 久未跟进等时间规则全部失效（未验证行永远卡住）。
+  const cnm = /^(\d{1,2})月(\d{1,2})日/.exec(value)
+  if (cnm) {
+    let when = new Date(today.getFullYear(), Number(cnm[1]) - 1, Number(cnm[2]))
+    if (Number.isNaN(when.getTime())) return null
+    if (when > today) when = new Date(when.getFullYear() - 1, when.getMonth(), when.getDate())
+    return Math.round((today.getTime() - when.getTime()) / 86400000)
+  }
   const match = /^(\d{1,2})-(\d{1,2})/.exec(value)
   if (!match) return null
   let when = new Date(today.getFullYear(), Number(match[1]) - 1, Number(match[2]))
@@ -242,6 +251,137 @@ function interviewDayDiff(dateText, today) {
   if (Number.isNaN(when.getTime())) return null
   const base = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   return Math.round((when.getTime() - base.getTime()) / 86400000)
+}
+
+/** 面试日程自洽检查：when 里的日期/星期必须与 date 字段一致。 */
+export function interviewDateWarning(whenText, dateText) {
+  const when = String(whenText ?? '').trim()
+  const date = String(dateText ?? '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!match) return '日期格式无法核实'
+  const [year, month, day] = match.slice(1).map(Number)
+  const parsed = new Date(year, month - 1, day)
+  if (Number.isNaN(parsed.getTime())) return '日期字段无效'
+
+  const issues = []
+  for (const hit of when.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
+    if (hit[0] !== date) issues.push(`when 写 ${hit[0]}，date 写 ${date}`)
+  }
+  const weekday = /(?:周|星期|礼拜)([一二三四五六日天])/.exec(when)
+  if (weekday) {
+    const names = '一二三四五六日'
+    const wanted = names.indexOf(weekday[1] === '天' ? '日' : weekday[1])
+    const actual = parsed.getDay() === 0 ? 6 : parsed.getDay() - 1
+    if (wanted !== actual) {
+      issues.push(`${date} 实际是周${names[actual]}，日程写周${weekday[1]}`)
+    }
+  }
+  return [...new Set(issues)].join('；')
+}
+
+/**
+ * 按岗位名给轨道线索。这里没有 JD 正文，所以 AI 产品只标「待核实」，不能定级。
+ */
+export function roleTrack(job) {
+  const text = String(job ?? '').trim()
+  if (!text) return { code: 'UNVERIFIED', label: '待核实', evidence: '缺岗位名和 JD' }
+  if (/敌人.{0,8}(?:AI|行为|战斗)|(?:战斗|NPC)\s*AI|行为树|StateTree|MassAI/i.test(text)) {
+    return { code: 'GAME_AI', label: '游戏AI', evidence: '岗位名命中敌人AI/战斗AI/行为/UE技术' }
+  }
+  if (
+    /(?:技术策划|工具策划).{0,12}(?:工具|研发效能|工具链|编辑器|管线|工作流)/.test(text)
+    || /(?:工具|研发效能|工具链|编辑器|管线|工作流).{0,12}(?:技术策划|工具策划)/.test(text)
+  ) {
+    return { code: 'GAME_DEV_TOOL', label: '研发工具', evidence: '岗位名命中技术策划/工具/管线' }
+  }
+  if (/小游戏|休闲|消除|换皮|IAA/.test(text) && !/AI|敌人|行为|技术策划/.test(text)) {
+    return { code: 'MISMATCH', label: '错配风险', evidence: '普通小游戏/休闲岗位，未见 AI 或行为职责' }
+  }
+  if (/AI|大模型|Agent|智能体|AIGC/i.test(text) && /产品|策划|产品工程/.test(text)) {
+    return {
+      code: 'AI_PRODUCT_VERIFY',
+      label: 'AI产品·待核实',
+      evidence: '岗位名有 AI 产品线索，仍需 JD 证明需求/原型/验收职责',
+    }
+  }
+  if (/战斗策划|UE技术策划|技术策划/.test(text)) {
+    return {
+      code: 'NEEDS_JD',
+      label: '待核实',
+      evidence: '岗位名只说明战斗/技术方向，需 JD 证明敌人 AI 与行为职责',
+    }
+  }
+  if (/策划|设计/.test(text)) {
+    return { code: 'NEEDS_JD', label: '待核实', evidence: '岗位名不足以判断轨道，需读 JD' }
+  }
+  return { code: 'UNVERIFIED', label: '待核实', evidence: '未命中已登记轨道' }
+}
+
+/**
+ * 求职代理护栏汇总。这里只展示可验证的本地状态：闸门文件是否存在、哪些
+ * 简历版本被阻断、哪些岗位待核实/错配，以及日程冲突数量；不推断发送权限。
+ */
+export function buildAgentAudit({
+  threads = [],
+  interviews = [],
+  resumeVersions = {},
+  factGateInstalled = false,
+  resumeGateInstalled = false,
+} = {}) {
+  const trackCounts = {
+    GAME_AI: 0,
+    GAME_DEV_TOOL: 0,
+    AI_PRODUCT_VERIFY: 0,
+    MISMATCH: 0,
+    UNVERIFIED: 0,
+  }
+  const mismatchCompanies = []
+  const unverifiedCompanies = []
+
+  for (const thread of Array.isArray(threads) ? threads : []) {
+    const code = thread?.track?.code
+    if (code === 'MISMATCH') {
+      trackCounts.MISMATCH += 1
+      if (thread.company) mismatchCompanies.push(thread.company)
+      continue
+    }
+    if (code === 'NEEDS_JD' || code === 'UNVERIFIED' || !code) {
+      trackCounts.UNVERIFIED += 1
+      if (thread?.company) unverifiedCompanies.push(thread.company)
+      continue
+    }
+    if (code in trackCounts) trackCounts[code] += 1
+  }
+
+  const resumes =
+    resumeVersions?.resumes && typeof resumeVersions.resumes === 'object'
+      ? resumeVersions.resumes
+      : {}
+  const blockedResumes = Object.entries(resumes)
+    .filter(([, entry]) => !entry || entry.approved_for_send !== true)
+    .map(([name, entry]) => ({
+      name,
+      track: String(entry?.track ?? ''),
+      reason: String(entry?.review_required_reason ?? '尚未复核'),
+    }))
+
+  const scheduleConflicts = (Array.isArray(interviews) ? interviews : [])
+    .filter((item) => item?.dateWarning)
+    .map((item) => ({
+      company: String(item.company ?? ''),
+      when: String(item.when ?? item.date ?? ''),
+      warning: String(item.dateWarning),
+    }))
+
+  return {
+    factGateInstalled: factGateInstalled === true,
+    resumeGateInstalled: resumeGateInstalled === true,
+    blockedResumes,
+    scheduleConflicts,
+    trackCounts,
+    mismatchCompanies: [...new Set(mismatchCompanies)].slice(0, 8),
+    unverifiedCompanies: [...new Set(unverifiedCompanies)].slice(0, 8),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +461,10 @@ function fileSet(dataDir) {
     meta: path.join(dataDir, 'company_meta.json'),
     blacklist: path.join(dataDir, 'outsourcing_blacklist.json'),
     pending: path.join(dataDir, 'boss_pending_decisions.json'),
+    approvals: path.join(dataDir, 'boss_approvals.json'),
+    resumeVersions: path.join(dataDir, 'resume_versions.json'),
+    factGate: path.join(os.homedir(), '.hermes/scripts/boss_fact_gate.py'),
+    resumeGate: path.join(os.homedir(), '.hermes/scripts/boss_resume_gate.py'),
   }
 }
 
@@ -471,7 +615,11 @@ export async function buildSnapshot(options = {}) {
     metaDoc,
     blacklistDoc,
     pendingDoc,
+    approvalsDoc,
     handledDoc,
+    resumeVersionsDoc,
+    factGateInstalled,
+    resumeGateInstalled,
   ] = await Promise.all([
       readCached(files.all, { rows: [] }),
       readCached(files.threads, { rows: [] }),
@@ -482,7 +630,11 @@ export async function buildSnapshot(options = {}) {
       readCached(files.meta, {}),
       readCached(files.blacklist, {}),
       readCached(files.pending, { items: [] }),
+      readCached(files.approvals, { items: [] }),
       readCached(files.handled, {}),
+      readCached(files.resumeVersions, { resumes: {} }),
+      fs.stat(files.factGate).then(() => true).catch(() => false),
+      fs.stat(files.resumeGate).then(() => true).catch(() => false),
     ])
 
   const version = [
@@ -495,7 +647,9 @@ export async function buildSnapshot(options = {}) {
     metaDoc.mtime,
     blacklistDoc.mtime,
     pendingDoc.mtime,
+    approvalsDoc.mtime,
     handledDoc.mtime,
+    resumeVersionsDoc.mtime,
   ].join('-')
 
   const merged = mergeFresh(allDoc.value, freshDoc.value)
@@ -608,7 +762,13 @@ export async function buildSnapshot(options = {}) {
     // 不该被公司级的 jev 旧判定盖住——否则「不太合适」的拒信也会挂成「等对方」。
     // SELFCARE 2026-10-26：REJ 是照「对方」的话写的，我方末条也可能出现「抱歉/谢谢」，
     // 不能把我说的话当拒信。末条是我方时交给后面的 jev/owed/已读规则判。
-    if (row.lastFrom !== '我' && REJ.test(fullText)) return '已结束'
+    // REJLAST 2026-10-28：full 可能是列表占位符（「您正在与BossX沟通」），而真正的婉拒句
+    // 躺在 last 里 —— 只测 fullText 会漏判。两处都测。
+    if (row.lastFrom !== '我' && (REJ.test(fullText) || REJ.test(text))) return '已结束'
+    // CANCEL 2026-10-28：「取消了面试 / 面试取消 取消原因:职位已删除」是系统或对方的**结果通知**，
+    // 不是提问。凡宝 16:12「取消了面试」曾被 owed 兜底成「待回复」，白占一条待办。
+    // 注意只认「取消+面试」这种结果句，别把「能取消吗」这类问句误判。
+    if (/取消了?面试|面试(已)?取消|取消原因/.test(fullText) && !/吗|？|\?/.test(text)) return '已结束'
     // SELFCLOSE 2026-10-26：末条是我方主动收尾（「就不占您时间了/祝顺利」），
     // 会话已经结束，别再挂成「等对方/待回复」。
     if (
@@ -688,7 +848,14 @@ export async function buildSnapshot(options = {}) {
       row.unverified &&
       row.lastFrom !== '我' &&
       !/附件简历|已发送|对方已同意|已发送给对方|\.pdf|点击查看附件|欢迎投递|^收到$|^好的$|^OK/.test(fullText)
-    ) return '未验证'
+    ) {
+      // UNVSTALE 2026-10-28：探针扫不到的旧行（BOSS 列表只保留近 176 条）会永远挂在
+      // 「未验证」，MetaApp 10-19「合适和您电话具体沟通」这种 9 天前的被动告知就是典型。
+      // 超过 7 天已无跟进价值 → 归「已结束」，别让一个查不到的会话长期占着待核对。
+      const d = daysSince(row.time, today)
+      if (d !== null && d >= 7) return '已结束'
+      return '未验证'
+    }
 
     if (row.owed) {
       if (ACKFILTER.test(fullText.trim())) return '已结束'
@@ -771,6 +938,7 @@ export async function buildSnapshot(options = {}) {
       lastFrom: row.lastFrom,
       job,
       salary,
+      track: roleTrack(job),
       fresh: row.fresh,
     })
   }
@@ -813,6 +981,7 @@ export async function buildSnapshot(options = {}) {
       next: String(item.next ?? '').trim(),
       date: String(item.date ?? '').trim(),
       dayDiff: interviewDayDiff(item.date, today),
+      dateWarning: interviewDateWarning(item.when ?? item.time, item.date),
     }))
     .sort((a, b) => (a.dayDiff ?? 9999) - (b.dayDiff ?? 9999))
 
@@ -850,6 +1019,14 @@ export async function buildSnapshot(options = {}) {
   }
 
   const pending = normalizePending(pendingDoc.value)
+  const approvals = buildApprovals(approvalsDoc.value)
+  const agentAudit = buildAgentAudit({
+    threads,
+    interviews: allInterviews,
+    resumeVersions: resumeVersionsDoc.value,
+    factGateInstalled,
+    resumeGateInstalled,
+  })
 
   const counts = {
     threads: threads.length,
@@ -878,8 +1055,70 @@ export async function buildSnapshot(options = {}) {
       : '',
     recentDays,
     pending,
+    approvals,
+    agentAudit,
     contacts: contacts.slice(-80).reverse(),
   }
+}
+
+// ---------------------------------------------------------------------------
+// 审批队列（boss_approvals.json）
+//
+// 2026-10-28 用户要求：「在面板上加上聊天记录、JD 详情、公司详情，给我审批按钮，
+// 我切换状态，你检测到能发就发。」所以面板从只读变成**唯一的人工授权入口**：
+// 用户在卡片上点「通过并发送」→ 状态写 approved → agent 侧 runner 看到 approved
+// 才允许调 boss_outbox.sh 真发。draft 与 draftHash 一起存，改过文案就必须重新审批。
+// ---------------------------------------------------------------------------
+const APPROVAL_STATUSES = ['pending', 'approved', 'skipped', 'sent', 'failed']
+const APPROVAL_STATUS_ORDER = { approved: 0, pending: 1, failed: 2, sent: 3, skipped: 4 }
+
+function normalizeApproval(item) {
+  if (!item || typeof item !== 'object') return null
+  const id = String(item.id ?? '').trim()
+  const company = String(item.company ?? '').trim()
+  if (!id || !company) return null
+  const status = String(item.status ?? 'pending')
+  return {
+    id,
+    date: String(item.date ?? '').trim(),
+    company,
+    recruiter: String(item.recruiter ?? item.name ?? '').trim(),
+    recruiterTitle: String(item.recruiterTitle ?? '').trim(),
+    jobTitle: String(item.jobTitle ?? item.job ?? '').trim(),
+    salary: String(item.salary ?? '').trim(),
+    city: String(item.city ?? '').trim(),
+    jobId: String(item.jobId ?? '').trim(),
+    tier: String(item.tier ?? '').trim(),
+    track: String(item.track ?? '').trim(),
+    evidence: String(item.evidence ?? '').trim(),
+    gap: String(item.gap ?? '').trim(),
+    draft: String(item.draft ?? '').trim(),
+    draftHash: String(item.draftHash ?? '').trim(),
+    status: APPROVAL_STATUSES.includes(status) ? status : 'pending',
+    addedAt: toIso(item.addedAt),
+    decidedAt: toIso(item.decidedAt),
+    approvedAt: toIso(item.approvedAt),
+    sentAt: toIso(item.sentAt),
+    sendResult: item.sendResult && typeof item.sendResult === 'object' ? item.sendResult : null,
+    note: String(item.note ?? '').trim(),
+  }
+}
+
+function buildApprovals(doc) {
+  const items = Array.isArray(doc?.items) ? doc.items : []
+  const out = []
+  for (const raw of items) {
+    const item = normalizeApproval(raw)
+    if (item) out.push(item)
+  }
+  out.sort((a, b) => {
+    const rank = (APPROVAL_STATUS_ORDER[a.status] ?? 9) - (APPROVAL_STATUS_ORDER[b.status] ?? 9)
+    if (rank) return rank
+    return String(b.addedAt ?? '').localeCompare(String(a.addedAt ?? ''))
+  })
+  const stats = { total: out.length, pending: 0, approved: 0, sent: 0, skipped: 0, failed: 0 }
+  for (const item of out) stats[item.status] = (stats[item.status] ?? 0) + 1
+  return { items: out, stats }
 }
 
 /**
@@ -909,6 +1148,108 @@ export async function markPending(id, status, options = {}) {
   if (!hit) throw operationError('not_found', `队列里没有这一条：${String(id)}`)
   await fs.writeFile(file, JSON.stringify({ ...doc, items, ts: new Date().toISOString() }, null, 1))
   return { ok: true, id: String(id), status }
+}
+
+/**
+ * 审批卡片详情：JD 正文 + 公司信息 + 完整聊天记录，按需拉取。
+ *
+ * 快照里只放轻量字段（列表渲染用），JD 正文和全部聊天记录在点开卡片时才取，
+ * 避免每次轮询把几百 KB 文本推给浏览器。
+ */
+export async function buildApprovalDetail(id, options = {}) {
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  const files = fileSet(dataDir)
+  const doc = await readJson(files.approvals, { items: [] })
+  const items = Array.isArray(doc?.items) ? doc.items : []
+  const raw = items.find((item) => String(item?.id ?? '') === String(id))
+  if (!raw) throw operationError('not_found', `审批队列里没有这一条：${String(id)}`)
+  const item = normalizeApproval(raw)
+
+  const [contactedDoc, metaDoc, historyDoc, threadsDoc] = await Promise.all([
+    readCached(files.contacted, { entries: [] }),
+    readCached(files.meta, {}),
+    readCached(files.history, { threads: {} }),
+    readCached(files.all, { rows: [] }),
+  ])
+
+  const meta = makeMetaLookup(metaDoc.value)(item.company) ?? {}
+  const contactRows = Array.isArray(contactedDoc.value?.entries) ? contactedDoc.value.entries : []
+  const contact =
+    contactRows.map(normalizeContact).filter(Boolean).find((row) => row.company === item.company) ?? {}
+
+  // 完整聊天记录：history 按「对接人|公司」存，优先匹配同名对接人，退化为同公司任意一条。
+  const historyRaw = historyDoc.value?.threads
+  let msgs = []
+  if (historyRaw && typeof historyRaw === 'object') {
+    const candidates = []
+    for (const [key, value] of Object.entries(historyRaw)) {
+      const parts = String(key).split('|')
+      const company = (parts.length > 1 ? parts[parts.length - 1] : parts[0]).trim()
+      if (company !== item.company) continue
+      const who = parts.length > 1 ? parts.slice(0, -1).join('|').trim() : ''
+      const list = Array.isArray(value?.msgs) ? value.msgs : []
+      candidates.push({ who, list })
+    }
+    const best =
+      candidates.find((row) => row.who && item.recruiter && row.who === item.recruiter) ??
+      candidates.sort((a, b) => b.list.length - a.list.length)[0]
+    if (best) {
+      msgs = best.list.map((entry) => ({
+        mine: entry?.mine === true,
+        text: String(entry?.t ?? ''),
+      }))
+    }
+  }
+
+  const probeRows = Array.isArray(threadsDoc.value?.rows) ? threadsDoc.value.rows : []
+  const probeRow = probeRows.find((row) => String(row.company ?? '').trim() === item.company)
+
+  return {
+    ...item,
+    jdText: String(raw.jdText ?? '').trim(),
+    jdUrl: item.jobId ? `https://www.zhipin.com/job_detail/${item.jobId}.html` : '',
+    companyDetail: {
+      industry: String(meta.industry ?? ''),
+      stage: String(meta.stage ?? ''),
+      city: String(meta.city ?? '') || item.city,
+      scale: String(meta.scale ?? ''),
+      intro: String(meta.intro ?? ''),
+      contactedBefore: contact.date || '',
+      channel: contact.channel || '',
+      tag: contact.tag || '',
+      note: contact.note || '',
+    },
+    chatState: String(probeRow?.state ?? ''),
+    chatLast: String(probeRow?.last ?? ''),
+    msgs,
+  }
+}
+
+/**
+ * 面板上切换审批状态。只允许人工三个动作：通过 / 跳过 / 撤回。
+ * sent / failed 由 agent 侧 runner 回写，面板不直接写，避免「点一下就算发成功」。
+ */
+export async function markApproval(id, status, options = {}) {
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  const file = fileSet(dataDir).approvals
+  const doc = await readJson(file, { items: [] })
+  const items = Array.isArray(doc?.items) ? doc.items : []
+  const allowed = ['pending', 'approved', 'skipped']
+  if (!allowed.includes(status)) {
+    throw operationError('invalid_status', `面板只能切到 ${allowed.join(' / ')}，收到：${status}`)
+  }
+  let hit = null
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    if (String(item.id ?? '') !== String(id)) continue
+    item.status = status
+    item.decidedAt = new Date().toISOString()
+    if (status === 'approved') item.approvedAt = item.decidedAt
+    hit = item
+  }
+  if (!hit) throw operationError('not_found', `审批队列里没有这一条：${String(id)}`)
+  await fs.writeFile(file, JSON.stringify({ ...doc, items, ts: new Date().toISOString() }, null, 1))
+  return { ok: true, id: String(id), status, company: String(hit.company ?? '') }
 }
 
 export async function buildDetail(company, options = {}) {
@@ -1025,6 +1366,16 @@ export function apply(ctx, config = {}) {
         return jsonResponse({
           ok: true,
           value: await markPending(payload.id, status, { dataDir }),
+        })
+      }
+      if (op === 'approval_detail') {
+        return jsonResponse({ ok: true, value: await buildApprovalDetail(payload.id, { dataDir }) })
+      }
+      if (op === 'approval_decide') {
+        const status = String(payload.status ?? '')
+        return jsonResponse({
+          ok: true,
+          value: await markApproval(payload.id, status, { dataDir }),
         })
       }
       if (op === 'ping') {
