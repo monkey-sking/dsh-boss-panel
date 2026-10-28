@@ -69,7 +69,7 @@ const liveSnap = await buildSnapshot()
 const snap = {
   ...liveSnap,
   approvals: {
-    stats: { total: 3, pending: 2, approved: 1, sent: 0, skipped: 0, failed: 0 },
+    stats: { total: 4, pending: 2, approved: 1, sent: 1, skipped: 0, failed: 0 },
     items: [
       {
         id: 'demo-001', company: '示例科技', jobTitle: '战斗策划', salary: '20-30K', city: '上海',
@@ -86,6 +86,12 @@ const snap = {
         id: 'demo-003', company: '样例网络', jobTitle: '战斗数值', salary: '15-20K', city: '长沙',
         recruiter: '联系人C', recruiterTitle: 'HR', tier: 'B', status: 'approved',
         evidence: '自走棋数值', gap: '无 AI 主责', draft: '您好，做过战斗数值与平衡…', draftHash: 'h3',
+      },
+      {
+        id: 'demo-004', company: '示例网络', jobTitle: '战斗策划', salary: '16-22K', city: '成都',
+        recruiter: '联系人D', recruiterTitle: 'HR', tier: 'A', status: 'sent',
+        sentAt: '2026-10-28T12:00:00Z', draft: '您好，做过敌人 AI…', draftHash: 'h4',
+        sendResult: { status: 'sent', ok: true, tail: '已送达' },
       },
     ],
   },
@@ -142,8 +148,8 @@ const rowFinder = (n) => typeof n.props?.className === 'string' && n.props.class
 const tree = renderFresh()
 const tabsNode = findAll(tree, (n) => Array.isArray(n.props?.tabs))[0]
 const tabLabels = (tabsNode?.props?.tabs ?? []).map((x) => x.label)
-check('Tab 只有三个（审批不再单开）', tabLabels.length === 3 && !tabLabels.some((l) => l.includes('tabApproval')))
-check('默认落在概览', tabLabels[0] === 'tabOverview')
+check('Tab 只有两个（今天/全部会话）', tabLabels.length === 2 && !tabLabels.some((l) => l.includes('tabApproval')))
+check('默认落在今天', tabLabels[0] === 'tabToday')
 
 // —— 2/3) 概览里有待审批队列 ——
 const out = collect(tree)
@@ -151,12 +157,12 @@ check('概览渲染待审批区块', out.texts.join(' | ').includes('approvalTit
 const rows = findAll(tree, rowFinder)
 check(`队列行数 = ${live.length}`, rows.length === live.length && rows.length > 0)
 const firstCompany = live[0]?.company ?? ''
-const lastCompany = items[Math.min(3, items.length - 1)]?.company ?? ''
+const lastCompany = live[live.length - 1]?.company ?? ''
 const joined = out.texts.join(' | ')
 check('行里带公司名', !!firstCompany && joined.includes(firstCompany) && joined.includes(lastCompany))
 check('行里带岗位/薪资', joined.includes(live[0]?.jobTitle ?? '@@') && joined.includes(live[0]?.salary ?? '@@'))
-check('概览仍保留「等着回复」区块', out.texts.join(' | ').includes('actionTitle'))
-check('概览有「最近发送」区块', out.texts.join(' | ').includes('approvalSendLog'))
+check('概览保留「等我回」区块', out.texts.join(' | ').includes('waitTitle'))
+check('概览有「发出去了」折叠行', out.texts.join(' | ').includes('sentTitle'))
 check('统计卡不再有「待审批」卡', !out.texts.includes('statApproval'))
 const inlineApprove = findAll(tree, (n) => n.props?.onClick && textOf(n) === 'approvalActApprove')
 check('队列行自带「通过」按钮', inlineApprove.length === 2)
@@ -207,16 +213,18 @@ check('带上条目 id', decide?.id === 'demo-001')
   target.sendResult = 'sent · 11:40 已送达'
   store = { getSnapshot: () => ({ loading: false, data: sentSnap, error: null }), subscribe: () => () => {}, refresh: async () => {} }
   const t4 = renderFresh()
-  const logRows = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props.className.includes('boss-aq-log') === false && n.props['data-clickable'] === 'true')
-  const sentRow = logRows.find((n) => !(n.props.className.includes('boss-aq-log')))
-  const allLog = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item'))
-  check('最近发送里出现 sent 行', allLog.length >= 1)
-  const clickable = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props['data-clickable'] === 'true')
-  check('最近发送行也可点开', clickable.length >= 1)
-  clickable[clickable.length - 1].props.onClick()
+  const sentLine = findAll(t4, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-sent-line'))[0]
+  check('默认折叠「发出去了」', !!sentLine)
+  sentLine.props.onClick()
   const t5 = rerender()
-  const body = collect(t5).texts.join(' | ')
-  check('已发行点开后有弹窗内容', body.includes('已送达') || body.includes('approvalStatusSent'))
+  const logRows = findAll(t5, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-log'))
+  check('展开后出现最近发送列表', logRows.length === 1)
+  const clickable = findAll(t5, (n) => typeof n.props?.className === 'string' && n.props.className.includes('boss-aq-item') && n.props['data-clickable'] === 'true')
+  check('最近发送的行也能点开', clickable.length >= 1)
+  clickable[0].props.onClick()
+  const t6 = rerender()
+  const body = collect(t6).texts.join(' | ')
+  check('已发行点开后有弹窗内容', body.includes('approvalStatusSent') || body.includes('approvalJd'))
 }
 
 // —— 7) 宿主侧：真实数据也能给 JD / 公司 / 聊天（内容随日期变，只验结构）——

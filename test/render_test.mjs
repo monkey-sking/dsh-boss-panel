@@ -69,7 +69,7 @@ const store = {
 function build() {
   seq = 0
   return panel.Comp({
-    initialTab: 'overview',
+    initialTab: 'today',
     useSnapshot: (f) => f(store.getSnapshot()),
     t: (k, vars) => (vars ? `${k}(${JSON.stringify(vars)})` : k),
     lang: 'zh',
@@ -126,52 +126,37 @@ function find(node, pred) {
 let ok = true
 const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if (!pass) ok = false }
 
-// —— 概览 Tab（默认） ——
+// —— 今天 Tab（默认）：只放需要动手的事 ——
 {
   const tree = render()
   const texts = [], classes = new Set()
   walk(tree, texts, classes)
   const joined = texts.join(' | ')
-  check('TabBar 概览/面试/会话', ['tabOverview','tabInterview','tabThreads'].every(k=>joined.includes(k)))
-  check('代理护栏状态条', classes.has('boss-audit') && joined.includes('agentGuard'))
-  check('今日简报', joined.includes('dailyDecide'))
-  // 「已读不回」卡 2026-10-27 移除（该桶随 48h 超时规则归零）。
-  check('6 张统计卡', ['statThreads','statDecide','statInterview','statOutreach','statAB'].every(k=>joined.includes(k)))
-  // 空数据目录没有状态可画；真实快照有线程时必须出现分布条。
-  check(
-    '状态分布条',
-    snap.counts.threads === 0 || (classes.has('boss-dist') && classes.has('boss-dist-bar')),
-  )
-  // 2026-10-27 起「已读不回」超 48h 并入已结束（用户：超时不管），
-  // 待你决定+已读不回 都为 0 时渲染的是空态 .boss-action-empty（内含 UI.EmptyState/.dp-empty），
-  // 所以这里两种都算通过。
-  check('需要行动区', classes.has('boss-action') || classes.has('boss-action-empty'))
-  check('近期面试区', classes.has('boss-upcoming') || joined.includes('noUpcoming'))
-  check('14 天趋势', classes.has('boss-days'))
+  check('TabBar 只有 今天/全部会话', joined.includes('tabToday') && joined.includes('tabAll'))
+  check('TabBar 不再有独立面试 Tab', !joined.includes('tabInterview'))
+  check('顶行三个数字', ['kpiToday', 'kpiWait', 'kpiInterview'].every((k) => joined.includes(k)))
+  check('7 张统计卡已删', !joined.includes('statThreads') && !joined.includes('statAB'))
+  check('等我回区块', joined.includes('waitTitle'))
+  check('等我回行/空态', classes.has('boss-wait-row') || classes.has('boss-action-empty'))
   check('概览不含会话表', !classes.has('boss-tr'))
+  check('14 天趋势已移出首屏', !classes.has('boss-days'))
+  const audit = (snap.agentAudit && snap.agentAudit.blockedResumes) || []
+  check('代理护栏只在真阻塞时出现', audit.length > 0 || !classes.has('boss-audit'))
+  const actionable = (snap.approvals?.items ?? []).filter(
+    (item) => item.status === 'pending' || item.status === 'approved',
+  ).length
+  const sentOrClosed = (snap.approvals?.items ?? []).filter(
+    (item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped',
+  ).length
+  check('待发首触区块只在有可点时出现', actionable > 0 === joined.includes('approvalTitle'))
+  check('已发出折叠行', sentOrClosed === 0 === !classes.has('boss-sent-line'))
 }
 
-// —— 面试 Tab：点击 TabBar 的「面试」按钮 ——
+// —— 全部会话 Tab：状态分布 + 14 天 + 会话表 ——
 {
   const tree = render()
-  const tabBtn = find(tree, (n) => n.props?.onClick && (n.children?.[0] === 'tabInterview' || n.props?.children === 'tabInterview'))
-  check('找到面试 Tab 按钮', !!tabBtn)
-  if (tabBtn) {
-    tabBtn.props.onClick() // setTab('interviews')
-    const tree2 = build()
-    const texts = [], classes = new Set()
-    walk(tree2, texts, classes)
-    const joined = texts.join(' | ')
-    check('面试表头 7 列', ['colCompany','colState','job','colWhen','colMode','state','colNext'].every(k=>joined.includes(k)))
-    check('面试表渲染', classes.has('boss-tr') && classes.has('iv'))
-  }
-}
-
-// —— 会话 Tab：点击「会话」按钮 ——
-{
-  const tree = render()
-  const tabBtn = find(tree, (n) => n.props?.onClick && (n.children?.[0] === 'tabThreads' || n.props?.children === 'tabThreads'))
-  check('找到会话 Tab 按钮', !!tabBtn)
+  const tabBtn = find(tree, (n) => n.props?.onClick && (n.children?.[0] === 'tabAll' || n.props?.children === 'tabAll'))
+  check('找到全部会话 Tab 按钮', !!tabBtn)
   if (tabBtn) {
     tabBtn.props.onClick() // setTab('threads')
     const tree2 = build()
@@ -179,9 +164,9 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
     walk(tree2, texts, classes)
     const joined = texts.join(' | ')
     check('会话表头', ['colState','colCompany','colJob','colMsg','colNext'].every(k=>joined.includes(k)))
-    // 「已读不回」超 48h 并入已结束（2026-10-27 用户定调），已从状态列表移除。
     check('状态筛选 chips', ['待你决定','等对方','可静默','已结束'].every(s=>joined.includes(s)))
     check('会话表渲染', classes.has('boss-tr') && classes.has('threads'))
+    check('状态分布与 14 天趋势在这里', classes.has('boss-dist') || snap.counts.threads === 0, classes.has('boss-days') || !snap.recentDays?.length)
   }
 }
 

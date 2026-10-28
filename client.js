@@ -366,13 +366,13 @@ function createUiKit(React) {
       noUpdated: '尚无快照',
       daily: '今日简报',
       dailyDecide: '待你决定 {n} 个',
-      dailyRead: '',
+      dailyRead: '已读未回 {n}',
       dailyOutreach: '今日已发首触 {n} 条（A {a} / B {b}）',
       dailyFailed: '未送达 {n} 条',
       statThreads: '会话',
       statPending: '待拍板',
       statDecide: '待你决定',
-      statRead: '',
+      statRead: '已读未回',
       statInterview: '已约/已面',
       statOutreach: '今日首触',
       statTodayThreads: '今日会话',
@@ -421,6 +421,20 @@ function createUiKit(React) {
       close: '关闭',
       detailFailed: '详情读取失败：{message}',
       tabOverview: '概览',
+      tabToday: '今天',
+      tabAll: '全部会话',
+      kpiToday: '今天发出',
+      kpiWait: '等我回',
+      kpiInterview: '面试',
+      waitTitle: '等我回',
+      waitSub: '对方最后一句在等你，回完这条就翻篇',
+      waitEmpty: '现在没有等你回的消息',
+      goReply: '去回',
+      sentTitle: '发出去了，等回复',
+      sentLine: '{n} 条 · 最后 {time}',
+      daysAgo: '{n} 天前',
+      tierUnknown: '未评级',
+      allLink: '全部 {n} 条会话 →',
       tabInterview: '面试',
       tabThreads: '会话',
       stateDist: '状态分布',
@@ -448,7 +462,8 @@ function createUiKit(React) {
       approvalChatNone: '这个岗位还没建会话；点「通过」后由发送端主动开聊',
       approvalNoJd: 'JD 没有存档，点下面的原链接看岗位页',
       approvalSummary: '待批 {pending} · 已通过待发 {approved} · 已发 {sent} · 跳过 {skipped}',
-      approvalApprove: '通过并发送',
+      approvalApprove: '发送',
+      approvalSendHint: '10 分钟内后台发出；发出后不能撤回',
       approvalSkip: '跳过',
       approvalRevoke: '撤回',
       approvalApproved: '已通过，agent 发送时会回写结果',
@@ -498,12 +513,12 @@ function createUiKit(React) {
       noUpdated: 'No snapshot yet',
       daily: 'Today',
       dailyDecide: 'Decisions waiting: {n}',
-      dailyRead: '',
+      dailyRead: 'Read, no reply {n}',
       dailyOutreach: 'First touches sent today: {n} (A {a} / B {b})',
       statThreads: 'Threads',
       statPending: 'Pending',
       statDecide: 'To decide',
-      statRead: '',
+      statRead: 'Read, no reply',
       statInterview: 'Scheduled/done',
       statOutreach: 'Today outreach',
       statTodayThreads: 'Threads today',
@@ -553,6 +568,20 @@ function createUiKit(React) {
       close: 'Close',
       detailFailed: 'Failed to read detail: {message}',
       tabOverview: 'Overview',
+      tabToday: 'Today',
+      tabAll: 'All threads',
+      kpiToday: 'Sent today',
+      kpiWait: 'Waiting on me',
+      kpiInterview: 'Interviews',
+      waitTitle: 'Waiting on my reply',
+      waitSub: 'Their last message is waiting; reply and it clears',
+      waitEmpty: 'Nothing waiting on you right now',
+      goReply: 'Reply',
+      sentTitle: 'Sent, awaiting reply',
+      sentLine: '{n} threads · last {time}',
+      daysAgo: '{n} days ago',
+      tierUnknown: 'Unrated',
+      allLink: 'All {n} threads →',
       tabInterview: 'Interviews',
       tabThreads: 'Threads',
       stateDist: 'Status mix',
@@ -580,7 +609,8 @@ function createUiKit(React) {
       approvalChatNone: 'No thread yet — sending will open the conversation',
       approvalNoJd: 'No archived JD — open the original posting below',
       approvalSummary: 'Waiting {pending} · Approved {approved} · Sent {sent} · Skipped {skipped}',
-      approvalApprove: 'Approve & send',
+      approvalApprove: 'Send',
+      approvalSendHint: 'Sent in background within 10 min; cannot be undone',
       approvalSkip: 'Skip',
       approvalRevoke: 'Undo',
       approvalApproved: 'Approved; the agent writes back the result',
@@ -864,6 +894,28 @@ function createUiKit(React) {
       .boss-ap-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .boss-ap-jd { margin: 0; font-size: 12px; line-height: 19px; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
       .boss-ap-link { font-size: 12px; color: var(--dsw-alias-brand-primary); text-decoration: none; }
+
+      /* —— 今天：一行数字 + 等我回 + 待发 + 已发折叠 —— */
+      .boss-today { display: flex; flex-direction: column; gap: 14px; }
+      .boss-kpi { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+      .boss-kpi-item { display: inline-flex; align-items: baseline; gap: 5px; }
+      .boss-kpi-item b { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+      .boss-kpi-sep { color: var(--dsw-alias-border-l2); }
+      .boss-more { padding-top: 2px; }
+      .boss-wait { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+      .boss-wait-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 13px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+      .boss-wait-row:last-child { border-bottom: none; }
+      .boss-wait-row[data-clickable="true"] { cursor: pointer; }
+      .boss-wait-row[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
+      .boss-wait-main { min-width: 0; }
+      .boss-wait-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+      .boss-wait-msg { margin-top: 3px; font-size: 12.5px; line-height: 18px; color: var(--dsw-alias-label-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .boss-sent-line { display: flex; align-items: baseline; gap: 8px; padding: 7px 2px; cursor: pointer; border-radius: 6px; }
+      .boss-sent-line:hover { background: var(--dsw-alias-bg-layer-2); }
+      .boss-sent-title { font-size: 13px; font-weight: 500; color: var(--dsw-alias-label-primary); }
+      .boss-sent-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-sent-toggle { margin-left: auto; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+      .boss-ap-foot-hint { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 
       /* —— 概览仪表盘 —— */
       .boss-overview { display: flex; flex-direction: column; gap: 14px; }
@@ -1426,7 +1478,7 @@ function createUiKit(React) {
                 h(
                   'div',
                   { className: 'boss-aq-top' },
-                  h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier || 'B'),
+                  h(UI.Tag, { tone: item.tier === 'A' ? 'success' : 'info' }, item.tier || t('tierUnknown')),
                   item.status === 'pending'
                     ? null
                     : h(
@@ -1451,6 +1503,97 @@ function createUiKit(React) {
     }
 
     /** 最近发送：把已发/失败/跳过摊开，解决「发出去的看不到去向」。 */
+    /**
+     * 「等我回」：只放球在我这边的会话（对方最后一句、状态是待回复/待你决定）。
+     * 首屏第一块，因为这是唯一需要用户动手的地方。
+     */
+    function WaitRows({ items, t, onOpen }) {
+      if (!items.length) {
+        return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('waitEmpty')))
+      }
+      return h(
+        'div',
+        { className: 'boss-wait' },
+        items.map((item) => {
+          const key = `${item.company}|${item.who}`
+          return h(
+            'div',
+            { key, className: 'boss-wait-row', 'data-clickable': 'true', onClick: () => onOpen(item.company) },
+            h(
+              'div',
+              { className: 'boss-wait-main' },
+              h(
+                'div',
+                { className: 'boss-wait-who' },
+                h('span', { className: 'boss-co' }, item.company || '—'),
+                h('span', { className: 'boss-aq-meta' }, item.who || ''),
+              ),
+              h('div', { className: 'boss-wait-msg' }, item.last || '—'),
+              h(
+                'div',
+                { className: 'boss-aq-meta' },
+                [item.days === 0 ? t('today') : item.days != null ? t('daysAgo', { n: item.days }) : '', item.state]
+                  .filter(Boolean)
+                  .join(' · '),
+              ),
+            ),
+            h(
+              UI.Button,
+              {
+                variant: 'primary',
+                size: 'sm',
+                onClick: (event) => {
+                  event?.stopPropagation?.()
+                  onOpen(item.company)
+                },
+              },
+              t('goReply'),
+            ),
+          )
+        }),
+      )
+    }
+
+    /**
+     * 「发出去了，等回复」：默认只占一行，点开才展开最近 8 条。
+     * 之前整块摊在首屏，400px 全是历史，把真正要回的消息挤到折叠线以下。
+     */
+    function SentSummary({ approvals, t, onOpen }) {
+      const [expanded, setExpanded] = React.useState(false)
+      const items = (approvals?.items ?? []).filter(
+        (item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped',
+      )
+      if (!items.length) return null
+      const sorted = [...items].sort((a, b) =>
+        String(b.sentAt || b.decidedAt || '').localeCompare(String(a.sentAt || a.decidedAt || '')),
+      )
+      const last = formatWhen(sorted[0]?.sentAt || sorted[0]?.decidedAt)
+      return h(
+        'div',
+        { className: 'boss-section' },
+        h(
+          'div',
+          {
+            className: 'boss-sent-line',
+            'data-clickable': 'true',
+            onClick: () => setExpanded((v) => !v),
+          },
+          h('span', { className: 'boss-sent-title' }, t('sentTitle')),
+          h('span', { className: 'boss-sent-meta' }, t('sentLine', { n: items.length, time: last })),
+          h('span', { className: 'boss-sent-toggle' }, expanded ? '▾' : '▸'),
+        ),
+        expanded ? h(SentLog, { approvals, t, onOpen }) : null,
+      )
+    }
+
+    // sendResult 可能是 {status, ok, detail, tail, fit} 对象，直接 String() 会渲染成 [object Object]。
+    const sendText = (item) => {
+      const r = item?.sendResult
+      if (!r) return ''
+      if (typeof r === 'string') return r
+      return [r.status, r.at, r.tail, r.detail, r.fit].filter((x) => typeof x === 'string' && x).join(' · ')
+    }
+
     function SentLog({ approvals, t, onOpen }) {
       const items = (approvals?.items ?? [])
         .filter((item) => item.status === 'sent' || item.status === 'failed' || item.status === 'skipped')
@@ -1489,8 +1632,8 @@ function createUiKit(React) {
                 h('span', { className: 'boss-aq-job' }, item.jobTitle || ''),
                 h('span', { className: 'boss-aq-meta' }, formatWhen(item.sentAt || item.decidedAt)),
               ),
-              item.sendResult
-                ? h('div', { className: 'boss-aq-draft' }, String(item.sendResult).slice(0, 120))
+              sendText(item)
+                ? h('div', { className: 'boss-aq-draft' }, sendText(item).slice(0, 120))
                 : null,
             ),
           ),
@@ -1548,7 +1691,11 @@ function createUiKit(React) {
       const acts = []
       if (status === 'pending') {
         acts.push(
-          h(UI.Button, { disabled: busy, onClick: () => onDecide(item, 'approved') }, t('approvalApprove')),
+          h(
+            UI.Button,
+            { variant: 'primary', disabled: busy, onClick: () => onDecide(item, 'approved') },
+            t('approvalApprove'),
+          ),
         )
         acts.push(
           h(UI.Button, { variant: 'outline', disabled: busy, onClick: () => onDecide(item, 'skipped') }, t('approvalSkip')),
@@ -1559,6 +1706,9 @@ function createUiKit(React) {
         )
       }
       acts.push(h(UI.Button, { variant: 'ghost', onClick: onClose }, t('close')))
+      if (status === 'pending') {
+        acts.push(h('span', { className: 'boss-ap-foot-hint' }, t('approvalSendHint')))
+      }
 
       return h(
         UI.Modal,
@@ -1692,9 +1842,8 @@ function createUiKit(React) {
 
     function TabBar({ tab, setTab, t }) {
       const tabs = [
-        { value: 'overview', label: t('tabOverview') },
-        { value: 'interviews', label: t('tabInterview') },
-        { value: 'threads', label: t('tabThreads') },
+        { value: 'today', label: t('tabToday') },
+        { value: 'threads', label: t('tabAll') },
       ]
       return h(UI.SegmentedTabs, { tabs, value: tab, onChange: setTab })
     }
@@ -1711,7 +1860,7 @@ function createUiKit(React) {
       // 测试需要跑三遍才能断言三个区块都在（否则会误报 RENDER INCOMPLETE）。
       // 默认永远落在概览（2026-10-28 返工：审批不单开 Tab，待审批候选就嵌在概览里，
       // 免得「等着回复的」那些区块被一个空 Tab 挡住）。
-      const [tab, setTab] = React.useState(() => props.initialTab ?? 'overview')
+      const [tab, setTab] = React.useState(() => props.initialTab ?? 'today')
       const [query, setQuery] = React.useState('')
       const [picked, setPicked] = React.useState([])
       const [openCompany, setOpenCompany] = React.useState(null)
@@ -1770,23 +1919,24 @@ function createUiKit(React) {
           .filter((item) => item.status === 'pending' || item.status === 'approved')
           .map((item) => item.company),
       )
+      // 真正还能点的：只有 pending/approved。已发/已跳过属于「最近发送」，不在这里重复。
+      const approvalActionable = (approvalsView?.items ?? []).filter(
+        (item) => item.status === 'pending' || item.status === 'approved',
+      )
       const pendingVisible = pending.filter(
         (item) => !pendingHidden.has(item.id) && !approvalCompanies.has(item.company),
       )
 
-      const cards = [
-        { label: t('statThreads'), value: counts.threads ?? 0, kind: null },
-        { label: t('statPending'), value: counts.pending ?? 0, kind: null },
-        { label: t('statDecide'), value: byState['待你决定'] ?? 0, kind: 'warn' },
-        {
-          label: t('statInterview'),
-          value: (byState['已约面试'] ?? 0) + (byState['已面试'] ?? 0),
-          kind: 'success',
-        },
-        { label: t('statOutreach'), value: daily.todayOutreach ?? 0, kind: null },
-        { label: t('statTodayThreads'), value: daily.todayThreads ?? 0, kind: null },
-        { label: t('statAB'), value: `A ${daily.a ?? 0} / B ${daily.b ?? 0}`, kind: null },
-      ]
+      // 「今天」只算真正会出现在首屏的三件事：今天发出、等我回、面试。
+      const todayKey = new Date().toLocaleDateString('sv-SE')
+      const sentToday = (data?.approvals?.items ?? []).filter(
+        (item) => item.status === 'sent' && String(item.sentAt ?? '').slice(0, 10) === todayKey,
+      ).length
+      // 球在我这边 = 对方最后一句 + 状态是待回复/待你决定。之前只看「待你决定」，
+      // 结果 4 条真正在等他回的消息一条都不显示（用户原话「那些等着回复的呢？？？」）。
+      const waitRows = (data?.threads ?? [])
+        .filter((item) => item.lastFrom === '对方' && (item.state === '待回复' || item.state === '待你决定'))
+        .sort((a, b) => (b.days ?? -1) - (a.days ?? -1))
 
       const interviews = data?.interviews ?? []
       const conflictInterviews = interviews.filter((item) => item.dateWarning)
@@ -1904,98 +2054,42 @@ function createUiKit(React) {
               )
             : null,
 
-          !loading && data ? h(AgentAuditStrip, { audit: data.agentAudit, t }) : null,
 
           loading ? h(UI.EmptyState, null, t('loading')) : null,
           !loading && !data ? h(UI.EmptyState, null, t('empty')) : null,
 
           !loading && data ? h(TabBar, { tab, setTab, t }) : null,
 
-          // —— 概览：仪表盘 ——
-          !loading && data && tab === 'overview'
+          // —— 今天：只放需要动手的事，0 条的区块整块消失 ——
+          !loading && data && tab === 'today'
             ? h(
                 'div',
-                { className: 'boss-overview' },
+                { className: 'boss-today' },
                 h(
                   'div',
-                  { className: 'boss-daily' },
-                  h('b', null, t('daily')),
-                  '：',
-                  h('b', null, t('dailyDecide', { n: daily.decide ?? 0 })),
-                  daily.decideCompanies?.length
-                    ? h(
-                        'span',
-                        { className: 'boss-meta' },
-                        `（${daily.decideCompanies.join('、')}）`,
-                      )
-                    : null,
-                  h('span', { className: 'boss-daily-sep' }, '·'),
-                  h('b', null, t('dailyRead', { n: daily.readNoReply ?? 0 })),
-                  h('span', { className: 'boss-daily-sep' }, '·'),
-                  h(
-                    'b',
-                    null,
-                    t('dailyOutreach', {
-                      n: daily.todayOutreach ?? 0,
-                      a: daily.a ?? 0,
-                      b: daily.b ?? 0,
-                    }),
-                  ),
-                  daily.todayFailed
-                    ? h(
-                        'span',
-                        { className: 'boss-daily-sep' },
-                        '·',
-                      )
-                    : null,
-                  daily.todayFailed
-                    ? h(
-                        'b',
-                        { className: 'boss-fail' },
-                        t('dailyFailed', { n: daily.todayFailed }),
-                      )
-                    : null,
-                  daily.failedCompanies?.length
-                    ? h(
-                        'span',
-                        { className: 'boss-meta boss-fail' },
-                        `（${daily.failedCompanies.join('、')}）`,
-                      )
-                    : null,
+                  { className: 'boss-kpi' },
+                  h('span', { className: 'boss-kpi-item' }, t('kpiToday'), h('b', null, String(sentToday))),
+                  h('span', { className: 'boss-kpi-sep' }, '·'),
+                  h('span', { className: 'boss-kpi-item' }, t('kpiWait'), h('b', null, String(waitRows.length))),
+                  h('span', { className: 'boss-kpi-sep' }, '·'),
+                  h('span', { className: 'boss-kpi-item' }, t('kpiInterview'), h('b', null, String(interviews.length))),
                 ),
+
                 h(
                   'div',
-                  { className: 'boss-cards' },
-                  cards.map((card) =>
-                    h(UI.StatCard, {
-                      key: card.label,
-                      label: card.label,
-                      value: String(card.value),
-                      tone:
-                        card.kind === 'warn'
-                          ? 'warning'
-                          : card.kind === 'error'
-                            ? 'danger'
-                            : card.kind === 'success'
-                              ? 'success'
-                              : undefined,
-                    }),
-                  ),
+                  { className: 'boss-section' },
+                  h(UI.SectionTitle, null, `${t('waitTitle')}（${waitRows.length}）`),
+                  h('span', { className: 'boss-section-hint' }, t('waitSub')),
+                  h(WaitRows, { items: waitRows, t, onOpen: open }),
                 ),
-                approvalsView
+
+                approvalActionable.length
                   ? h(
                       'div',
-                      null,
-                      h(
-                        'div',
-                        { className: 'boss-section' },
-                        h(
-                          UI.SectionTitle,
-                          null,
-                          `${t('approvalTitle')}（${(data.approvals.items ?? []).filter((i) => i.status !== 'sent' && i.status !== 'skipped').length}）`,
-                        ),
-                        h('span', { className: 'boss-section-count' }, t('approvalSub')),
-                      ),
+                      { className: 'boss-section' },
+                      h(UI.SectionTitle, null, `${t('approvalTitle')}（${approvalActionable.length}）`),
+                      h('span', { className: 'boss-section-hint' }, t('approvalSub')),
+                      approvalNotice ? h('div', { className: 'boss-aq-notice' }, approvalNotice) : null,
                       h(ApprovalQueue, {
                         approvals: approvalsView,
                         t,
@@ -2004,93 +2098,28 @@ function createUiKit(React) {
                         busyId: approvalBusy ? approvalBusyId : null,
                         notice: approvalNotice,
                       }),
-                      h(
-                        'div',
-                        { className: 'boss-section', style: { marginTop: 18 } },
-                        h(UI.SectionTitle, null, t('approvalSendLog')),
-                        h('span', { className: 'boss-section-count' }, t('approvalSendLogSub')),
-                      ),
-                      h(SentLog, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
                     )
                   : null,
-                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('stateDist'))),
-                h(StateBar, { byState, t }),
-                h(
-                  'div',
-                  { className: 'boss-split' },
-                  h(
-                    'div',
-                    { className: 'boss-split-col' },
-                    h(
+
+                h(SentSummary, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
+
+                interviews.length
+                  ? h(
                       'div',
                       { className: 'boss-section' },
-                      h(UI.SectionTitle, null, t('actionTitle')),
-                      h('span', { className: 'boss-section-count' }, t('actionSub')),
-                    ),
-                    h(ActionRows, { threads: data.threads ?? [], t, onOpen: open }),
-                  ),
-                  h(
-                    'div',
-                    { className: 'boss-split-col' },
-                    h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('upcoming'))),
-                    h(UpcomingList, { interviews, t, onOpen: open }),
-                  ),
-                ),
-                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('contactsDays'))),
-                h(
-                  'div',
-                  { className: 'boss-days', style: { marginTop: 6 } },
-                  (data.recentDays ?? []).map((day) =>
-                    h(
-                      'span',
-                      {
-                        key: day.date,
-                        className: 'boss-day',
-                        'data-zero': day.count === 0 ? 'true' : 'false',
-                        title: day.date,
-                      },
-                      `${shortDate(day.date)} · ${day.count}`,
-                    ),
-                  ),
-                ),
-              )
-            : null,
+                      h(UI.SectionTitle, null, t('upcoming')),
+                      h(UpcomingList, { interviews, t, onOpen: open }),
+                    )
+                  : null,
 
-          // —— 面试日程 ——
-          !loading && data && tab === 'interviews'
-            ? h(
-                'div',
-                null,
                 h(
                   'div',
-                  { className: 'boss-section' },
-                  h(UI.SectionTitle, null, t('sectionInterview')),
-                  h('span', { className: 'boss-section-count' }, String(interviews.length)),
-                ),
-                h(
-                  'div',
-                  { className: 'boss-table', style: { marginTop: 8 } },
+                  { className: 'boss-more' },
                   h(
-                    'div',
-                    { className: 'boss-tr iv boss-th' },
-                    h('span', null, t('colCompany')),
-                    h('span', null, t('colState')),
-                    h('span', null, t('job')),
-                    h('span', null, t('colWhen')),
-                    h('span', null, t('colMode')),
-                    h('span', null, t('state')),
-                    h('span', null, t('colNext')),
+                    UI.Button,
+                    { variant: 'ghost', size: 'sm', onClick: () => setTab('threads') },
+                    t('allLink', { n: counts.threads ?? 0 }),
                   ),
-                  interviews.length
-                    ? interviews.map((item, index) =>
-                        h(InterviewRow, { key: `${item.company}|${index}`, item, t, onOpen: open }),
-                      )
-                    : h(
-                        UI.EmptyState,
-                        null,
-                        t('interviewEmpty'),
-                        data.interviewEmptyTail ? `；${data.interviewEmptyTail}` : '',
-                      ),
                 ),
               )
             : null,
@@ -2142,6 +2171,24 @@ function createUiKit(React) {
                     ),
                   ),
                 ),
+                h('div', { className: 'boss-section' }, h(UI.SectionTitle, null, t('stateDist'))),
+                h(StateBar, { byState, t }),
+                h(
+                  'div',
+                  { className: 'boss-days', style: { marginTop: 10, marginBottom: 12 } },
+                  (data.recentDays ?? []).map((day) =>
+                    h(
+                      'span',
+                      {
+                        key: day.date,
+                        className: 'boss-day',
+                        'data-zero': day.count === 0 ? 'true' : 'false',
+                        title: day.date,
+                      },
+                      `${shortDate(day.date)} · ${day.count}`,
+                    ),
+                  ),
+                ),
                 h(
                   'div',
                   { className: 'boss-table' },
@@ -2152,7 +2199,7 @@ function createUiKit(React) {
                           key: `${item.company}|${item.who}|${index}`,
                           item,
                           t,
-                          onOpen: setOpenCompany,
+                          onOpen: open,
                         }),
                       )
                     : h(UI.EmptyState, null, t('noMatch')),

@@ -867,7 +867,9 @@ export async function buildSnapshot(options = {}) {
 
     // ONLYFRESH：只有探针里的新行才配判「待你决定」，旧快照的预览文本不可信。
     if (!row.fresh) {
-      if (/吗|？|\?|请问|能否|是否|方便|面试|薪资|到岗/.test(text)) {
+      // LASTFROMME 2026-10-28：问号只能算「对方在问我」。我方刚发出去的首触草稿里
+      // 也常带「是硬线吗？」这类问句，之前被误判成待你决定，用户看到就是「我拍板什么？」
+      if (row.lastFrom === '对方' && /吗|？|\?|请问|能否|是否|方便|面试|薪资|到岗/.test(text)) {
         const days = daysSince(row.time, today)
         if (days !== null && days <= 3 && /吗|？|\?|请问|能否|是否|方便/.test(text)) {
           return '待你决定'
@@ -1020,6 +1022,19 @@ export async function buildSnapshot(options = {}) {
 
   const pending = normalizePending(pendingDoc.value)
   const approvals = buildApprovals(approvalsDoc.value, threads)
+
+  // 审批链（boss_approval_runner）发送后只写 boss_approvals.json，不写 contacted.json，
+  // 简报不能只看 contacted。两边取大可避免「今天已发 0 条」压着 11 条已发明的自相矛盾。
+  {
+    const todayKey = new Date().toLocaleDateString('sv-SE')
+    const sentToday = approvals.items.filter(
+      (item) => item.status === 'sent' && String(item.sentAt ?? '').slice(0, 10) === todayKey,
+    )
+    if (sentToday.length > daily.todayOutreach) {
+      daily.todayOutreach = sentToday.length
+      daily.todayFailed = sentToday.filter((item) => item.sendResult && item.sendResult.ok === false).length
+    }
+  }
   const agentAudit = buildAgentAudit({
     threads,
     interviews: allInterviews,
