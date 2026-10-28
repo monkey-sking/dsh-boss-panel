@@ -193,7 +193,7 @@ node test/detail_test.mjs     # detail op 字段与聊天记录
 ## 数据契约
 
 字段来源、必填时机、空值语义（「未采集」而不是空白）见 [docs/data-contract.md](docs/data-contract.md)。
-体检：`python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py audit`（待发缺 JD/职位号 → `BLOCK` + exit 1）。
+体检：`boss_approvals.py audit`（待发缺 JD/职位号 → `BLOCK` + exit 1）、`boss_approvals.py lint`（首触文案四条硬伤 + 同批模板撞车）。
 
 ## 安全边界（2026-10-28 只读安全评审的实测结论）
 
