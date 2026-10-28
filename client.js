@@ -512,6 +512,7 @@ function createUiKit(React) {
       approvalsCorrupt: '审批文件一时读不出来（可能后台正在写），下面的待发列表不是真实状态 —— 稍等会自动恢复',
       hardGateChip: 'JD 硬门槛',
       approvalStuck: '有 {n} 条已通过但超过 20 分钟没发出去 —— 后台发送器可能没在跑（dsh 的 boss-approval-send 任务）',
+      chatOlder: '上面还有 {n} 条更早的聊天，这里只显示最近 30 条',
       hardGateWarn: 'JD 写明了硬性条件，先确认你够得上再发',
       approvalStatusPending: '待审批',
       approvalStatusApproved: '已通过 · 待发送',
@@ -682,6 +683,7 @@ function createUiKit(React) {
       approvalsCorrupt: 'The approvals file is unreadable right now (likely being written) — the queue below is not authoritative',
       hardGateChip: 'JD hard gate',
       approvalStuck: '{n} approved over 20 minutes ago but not sent — the background sender may be down',
+      chatOlder: '{n} earlier messages are hidden — showing the latest 30',
       hardGateWarn: 'The JD states a hard requirement — confirm you qualify before sending',
       approvalStatusPending: 'Waiting',
       approvalStatusApproved: 'Approved · queued',
@@ -883,10 +885,10 @@ function createUiKit(React) {
       .boss-intro { margin: 4px 0 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
       .boss-head-side { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
       .boss-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
-      .boss-daily { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; line-height: 20px; }
+      .boss-daily { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); border-radius: 8px; padding: 12px 16px; font-size: 13px; line-height: 20px; }
       .boss-daily b { font-variant-numeric: tabular-nums; }
       .boss-daily-sep { color: var(--dsw-alias-label-secondary); margin: 0 6px; }
-      .boss-fail { color: var(--dsw-alias-state-warn-primary, #8a4b00); font-weight: 600; }
+      .boss-fail { color: var(--dsw-alias-state-error-primary); font-weight: 600; }
       .boss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
       .boss-section { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin: 10px 0 0; }
       .boss-section > .boss-section-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -894,21 +896,26 @@ function createUiKit(React) {
       .boss-section-count { font-size: 12px; font-weight: 400; color: var(--dsw-alias-label-secondary); }
       .boss-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .boss-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-      .boss-table { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
-      .boss-tr { display: grid; gap: 10px; align-items: start; padding: 9px 13px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+      .boss-table { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow-x: auto; background: var(--dsw-alias-bg-layer-1); }
+      .boss-tr { display: grid; gap: 10px; align-items: start; padding: 8px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
       .boss-tr:last-child { border-bottom: none; }
       .boss-tr[data-clickable="true"] { cursor: pointer; }
       .boss-tr[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
       [data-clickable="true"]:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; border-radius: 6px; }
-      .boss-th { font-size: 11.5px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); font-weight: 500; }
-      .boss-tr.threads { grid-template-columns: 82px minmax(120px, 1fr) minmax(120px, 1.1fr) minmax(160px, 1.9fr) 96px; }
+      .boss-th { font-size: 12px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); font-weight: 500; }
+      .boss-tr.threads { grid-template-columns: 64px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 72px; }
+      /* 480px 面板：最后一列（下一步）整列消失且没有滚动条 —— 收窄并隐藏它 */
+      @media (max-width: 520px) {
+        .boss-tr.threads { grid-template-columns: 56px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr); }
+        .boss-nx { display: none; }
+      }
       .boss-tr.iv { grid-template-columns: minmax(120px, 1.2fr) 84px 84px minmax(110px, 1fr) 70px minmax(90px, .9fr) minmax(110px, 1fr); }
       .boss-co { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .boss-sub { font-size: 11.5px; line-height: 16px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .boss-sub { font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
       .boss-tx { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
       .boss-nx { font-size: 12px; color: var(--dsw-alias-label-secondary); }
-      .boss-sal { display: inline-block; margin-left: 6px; font-size: 11.5px; color: var(--dsw-alias-brand-primary); }
+      .boss-sal { display: inline-block; margin-left: 6px; font-size: 12px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
       .boss-chipd { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 11px; line-height: 16px; border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); white-space: nowrap; }
       .boss-chipd[data-tone="hot"] { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); font-weight: 600; }
       .boss-chipd[data-tone="warn"] { color: var(--dsw-alias-state-warn-primary); border-color: var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-2); font-weight: 600; }
@@ -917,24 +924,25 @@ function createUiKit(React) {
 .boss-chipd[data-tone="past"], .boss-chipd[data-tone="tbd"] { border-style: dashed; color: var(--dsw-alias-label-secondary); }
       .boss-date-warning { display: block; margin-top: 2px; color: var(--dsw-alias-state-warn-primary); font-size: 12px; line-height: 18px; font-weight: 600; }
       .boss-conflict-banner { border: 1px solid var(--dsw-alias-state-warn-primary); border-left-width: 3px; border-radius: 10px; padding: 11px 14px; color: var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 18px; }
-      .boss-conflict-banner strong { display: block; margin-bottom: 3px; font-size: 12.5px; }
+      .boss-conflict-banner strong { display: block; margin-bottom: 3px; font-size: 13px; }
       .boss-conflict-row { color: var(--dsw-alias-label-primary); }
-      .boss-audit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 9px 12px; background: var(--dsw-alias-bg-layer-1); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11.5px; line-height: 18px; }
+      .boss-audit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px 12px; background: var(--dsw-alias-bg-layer-1); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12px; line-height: 18px; }
       .boss-audit-title { font-weight: 600; margin-right: 2px; }
       .boss-audit-note { color: var(--dsw-alias-label-secondary); }
-      .boss-track { display: inline-block; margin-top: 4px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 11.5px; line-height: 17px; }
+      .boss-track { display: inline-block; margin-top: 4px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 17px; }
       .boss-error { border: 1px solid var(--dsw-alias-state-error-primary); border-radius: 10px; padding: 10px 14px; font-size: 12px; color: var(--dsw-alias-state-error-primary); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .boss-days { display: flex; gap: 4px; flex-wrap: wrap; }
       .boss-day { border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 2px 8px; font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
       .boss-day[data-zero="false"] { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
-      .boss-kv { display: flex; gap: 8px; font-size: 12.5px; line-height: 19px; }
-      .boss-kv-key { flex: 0 0 74px; color: var(--dsw-alias-label-secondary); }
+      .boss-kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 24px; }
+      .boss-kv { display: flex; gap: 8px; font-size: 13px; line-height: 20px; }
+      .boss-kv-key { flex: 0 0 64px; color: var(--dsw-alias-label-secondary); }
       .boss-kv-val { flex: 1 1 auto; min-width: 0; word-break: break-word; }
-      .boss-chat { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow: auto; }
-      .boss-cm { font-size: 12.5px; line-height: 19px; padding: 6px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); word-break: break-word; }
+      .boss-chat { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 24vh; overflow: auto; }
+      .boss-cm { font-size: 13px; line-height: 20px; padding: 6px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); word-break: break-word; }
       .boss-cm[data-mine="true"] { margin-left: 32px; border-left: 2px solid var(--dsw-alias-brand-primary); }
       .boss-cm[data-mine="false"] { margin-right: 32px; }
-      .boss-cm-tag { font-size: 10.5px; color: var(--dsw-alias-label-secondary); margin-right: 6px; }
+      .boss-cm-tag { font-size: 11px; color: var(--dsw-alias-label-secondary); margin-right: 6px; }
 
       /* —— 审批队列（概览内嵌）与审批弹窗 —— */
       .boss-aq-head { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); margin: 4px 0 8px; display: flex; gap: 10px; flex-wrap: wrap; }
@@ -943,8 +951,8 @@ function createUiKit(React) {
 
       /* 待审批条 + 最近发送：一个容器、每行两栏（依据 / 动作），不用表格以免和「等你回复」看串 */
       .boss-section-hint { margin: 0 0 2px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
-      .boss-aq-list { display: flex; flex-direction: column; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
-      .boss-aq-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 0.5px solid var(--dsw-alias-border-l4); }
+      .boss-aq-list { display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+      .boss-aq-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
       .boss-aq-item:last-child { border-bottom: 0; }
       .boss-aq-item[data-clickable="true"] { cursor: pointer; }
       .boss-aq-item[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
@@ -952,10 +960,10 @@ function createUiKit(React) {
       .boss-aq-item[data-status="failed"] { box-shadow: inset 2px 0 0 var(--dsw-alias-state-error-primary); }
       .boss-aq-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
       .boss-aq-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
-      .boss-aq-co { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+      .boss-aq-co { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-aq-job { font-size: 13px; color: var(--dsw-alias-label-secondary); }
       .boss-aq-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
-      .boss-aq-state { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-aq-state { font-size: 12px; color: var(--dsw-alias-label-secondary); padding-left: 8px; border-left: 1px solid var(--dsw-alias-border-l2); }
       .boss-aq-draft { font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
       .boss-aq-acts { display: flex; align-items: center; gap: 6px; flex: none; }
       .boss-aq-log .boss-aq-item { padding: 8px 12px; }
@@ -965,50 +973,53 @@ function createUiKit(React) {
       .boss-ap-gap { color: var(--dsw-alias-state-warn-primary); }
       .boss-ap-result { color: var(--dsw-alias-state-error-primary); }
       .boss-ap-draft-block { margin-top: 10px; }
-      .boss-ap-draft { font-size: 12.5px; line-height: 20px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; word-break: break-word; }
+      .boss-ap-draft { font-size: 13px; line-height: 20px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; word-break: break-word; }
       .boss-ap-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .boss-ap-skip { color: var(--dsw-alias-state-error-primary); }
       .boss-ap-jd-p { margin: 0 0 8px; }
       .boss-ap-jd-p:last-child { margin-bottom: 0; }
-      .boss-ap-jd { margin: 0; font-size: 13.5px; line-height: 21px; tab-size: 4; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
+      .boss-ap-jd { margin: 0; font-size: 13px; line-height: 20px; tab-size: 4; white-space: pre-wrap; word-break: break-word; max-height: 24vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
       .boss-ap-link { font-size: 12px; color: var(--dsw-alias-brand-primary); text-decoration: none; }
 
       /* —— 今天：一行数字 + 等我回 + 待发 + 已发折叠 —— */
       .boss-today { display: flex; flex-direction: column; gap: 14px; }
-      .boss-kpi { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+      .boss-kpi { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--dsw-alias-label-secondary); }
       .boss-kpi-item { display: inline-flex; align-items: baseline; gap: 5px; }
       button.boss-kpi-item { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; border-radius: 4px; }
       button.boss-kpi-item:hover { color: var(--dsw-alias-brand-primary); }
       button.boss-kpi-item:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
-      .boss-kpi-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+      .boss-kpi-sub { font-size: 12px; color: var(--dsw-alias-label-secondary); }
       .boss-kpi-bad b { color: var(--dsw-alias-label-danger); }
       .boss-degraded { margin: 8px 0 2px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); font-size: 13px; color: var(--dsw-alias-label-secondary); }
       .boss-today-interview { margin: 10px 0 2px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); font-size: 13px; }
       .boss-section-head { display: flex; align-items: baseline; gap: 8px; }
-      .boss-fail-rows { margin-top: 10px; border: 1px solid var(--dsw-alias-label-danger); border-radius: 8px; padding: 8px 11px; }
+      .boss-fail-rows { margin-top: 10px; border: 1px solid var(--dsw-alias-label-danger); border-radius: 8px; padding: 8px 12px; }
       .boss-fail-title { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-danger); margin-bottom: 6px; }
-      .boss-fail-row { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 4px 0; }
+      .boss-fail-row { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; }
       .boss-fail-why { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .boss-aq-more { padding: 6px 2px 0; }
-      .boss-ap-coverage { margin: 6px 0 8px; padding: 5px 9px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; }
-      .boss-wait-consent { display: inline-block; margin-top: 4px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--dsw-alias-label-warning); color: var(--dsw-alias-label-warning); font-size: 11.5px; }
+      .boss-aq-more { padding: 8px 0 0; }
+      .boss-ap-coverage { margin: 6px 0 8px; padding: 4px 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; }
+      .boss-wait-consent { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--dsw-alias-label-warning); color: var(--dsw-alias-label-warning); font-size: 12px; }
       .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; }
-      .boss-kpi-item b { font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
-      .boss-kpi-sep { color: var(--dsw-alias-border-l2); }
+      .boss-kpi-item b { font-size: 16px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+      .boss-kpi-sep { color: var(--dsw-alias-label-tertiary); }
       .boss-more { padding-top: 2px; }
       .boss-wait { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
-      .boss-wait-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 13px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+      .boss-wait-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
       .boss-wait-row:last-child { border-bottom: none; }
       .boss-wait-row[data-clickable="true"] { cursor: pointer; }
       .boss-wait-row[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
       .boss-wait-main { min-width: 0; }
       .boss-wait-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-      .boss-wait-msg { margin-top: 3px; font-size: 12.5px; line-height: 18px; color: var(--dsw-alias-label-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-      .boss-sent-line { display: flex; align-items: baseline; gap: 8px; padding: 7px 2px; cursor: pointer; border-radius: 6px; }
+      .boss-wait-who > * { flex: none; }
+      .boss-wait-who > .boss-co { flex: 1 1 auto; }
+      .boss-wait-msg { margin-top: 3px; font-size: 13px; line-height: 18px; color: var(--dsw-alias-label-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .boss-sent-line { display: flex; align-items: baseline; gap: 8px; padding: 8px 2px; cursor: pointer; border-radius: 6px; min-width: 0; }
       .boss-sent-line:hover { background: var(--dsw-alias-bg-layer-2); }
-      .boss-sent-title { font-size: 13px; font-weight: 500; color: var(--dsw-alias-label-primary); }
-      .boss-sent-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-sent-title { font-size: 13px; font-weight: 500; color: var(--dsw-alias-label-primary); flex: 0 0 auto; }
+      .boss-sent-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-sent-toggle { margin-left: auto; font-size: 11px; color: var(--dsw-alias-label-secondary); }
-      .boss-ap-foot-hint { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+      .boss-ap-foot-hint { font-size: 12px; color: var(--dsw-alias-label-secondary); }
 
       /* —— 概览仪表盘 —— */
       .boss-overview { display: flex; flex-direction: column; gap: 14px; }
@@ -1022,7 +1033,7 @@ function createUiKit(React) {
       .boss-dist-seg[data-kind="success"] { background: var(--dsw-alias-state-success-primary); }
       .boss-dist-seg[data-kind="idle"] { background: var(--dsw-alias-border-l2); }
       .boss-dist-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-      .boss-dist-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
+      .boss-dist-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
       .boss-dist-item b { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); font-weight: 500; }
       .boss-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
       .boss-split-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -1139,6 +1150,13 @@ function createUiKit(React) {
       ].filter(([, value]) => value)
 
       const msgs = data.msgs ?? []
+      const chatRef = React.useRef(null)
+      React.useEffect(() => {
+        const el = chatRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, [msgs.length])
+      const shownMsgs = msgs.slice(-30)
+      const olderCount = msgs.length - shownMsgs.length
 
       return h(
         UI.Modal,
@@ -1754,18 +1772,16 @@ function createUiKit(React) {
       // 用户看到的每个空格都应该是一个明确的「没采到」，而不是让人猜。
       const MISSING = t('notCollected')
       const orMissing = (value) => (value ? String(value) : MISSING)
+      const companyLine = [data.companyDetail?.industry, data.companyDetail?.stage, data.companyDetail?.scale]
+        .filter(Boolean)
+        .join(' · ')
       const kv = [
         ['job', orMissing(data.jobTitle)],
         ['salary', orMissing(data.salary)],
         ['city', orMissing(data.city)],
         ['recruiter', orMissing([data.recruiter, data.recruiterTitle].filter(Boolean).join(' / '))],
         ['ab', orMissing(data.tier)],
-        ['industry', orMissing(data.companyDetail?.industry)],
-        ['stage', orMissing(data.companyDetail?.stage)],
-        ['scale', orMissing(data.companyDetail?.scale)],
-        ['first', orMissing(data.companyDetail?.contactedBefore)],
-        ['channel', orMissing(data.companyDetail?.channel)],
-        ['note', orMissing(data.companyDetail?.note)],
+        ['company', orMissing(companyLine)],
       ]
       const filled = (data.coverage ? Object.values(data.coverage).filter(Boolean).length : 0)
       const total = data.coverage ? Object.keys(data.coverage).length : 0
@@ -1785,7 +1801,11 @@ function createUiKit(React) {
           ),
         )
         acts.push(
-          h(UI.Button, { variant: 'outline', disabled: busy, onClick: () => onDecide(item, 'skipped') }, t('approvalSkip')),
+          h(
+            UI.Button,
+            { variant: 'ghost', className: 'boss-ap-skip', disabled: busy, onClick: () => onDecide(item, 'skipped') },
+            t('approvalSkip'),
+          ),
         )
       } else if (item && status !== 'sent') {
         acts.push(
@@ -1802,7 +1822,7 @@ function createUiKit(React) {
         {
           open: true,
           size: 'lg',
-          title: `${data.company || ''} · ${data.jobTitle || ''}`,
+          title: data.company || data.jobTitle || '',
           onClose,
           footer: h('div', { className: 'boss-ap-acts' }, acts),
         },
@@ -1829,13 +1849,21 @@ function createUiKit(React) {
                     )
                   : null,
               ),
+              data.draft
+                ? h(
+                    'div',
+                    { className: 'boss-ap-draft-block' },
+                    h(UI.SectionTitle, null, t('approvalDraft')),
+                    h('div', { className: 'boss-ap-draft' }, data.draft),
+                  )
+                : null,
               coverageLine
                 ? h('div', { className: 'boss-ap-coverage' }, coverageLine)
                 : null,
               kv.length
                 ? h(
                     'div',
-                    null,
+                    { className: 'boss-kv-grid' },
                     kv.map(([key, value]) =>
                       h(
                         'div',
@@ -1852,14 +1880,6 @@ function createUiKit(React) {
               data.gap
                 ? h('div', { className: 'boss-ap-line boss-ap-gap' }, h('b', null, `${t('approvalGap')}：`), data.gap)
                 : null,
-              data.draft
-                ? h(
-                    'div',
-                    { className: 'boss-ap-draft-block' },
-                    h(UI.SectionTitle, null, t('approvalDraft')),
-                    h('div', { className: 'boss-ap-draft' }, data.draft),
-                  )
-                : null,
               h(UI.SectionTitle, { style: { marginTop: 14 } }, t('approvalChat')),
               msgs.length
                 ? h(
@@ -1868,9 +1888,13 @@ function createUiKit(React) {
                       className: 'boss-chat',
                       role: 'region',
                       tabIndex: 0,
+                      ref: chatRef,
                       'aria-label': `${t('approvalChat')}（${msgs.length}）`,
                     },
-                    msgs.map((entry, index) =>
+                    olderCount > 0
+                      ? h('div', { className: 'boss-ap-line' }, t('chatOlder', { n: olderCount }))
+                      : null,
+                    shownMsgs.map((entry, index) =>
                       h(
                         'div',
                         { key: index, className: 'boss-cm', 'data-mine': entry.mine ? 'true' : 'false' },
@@ -2346,8 +2370,7 @@ function createUiKit(React) {
 
                 // 待发首触常驻：0 条也要有一行「今日候选 12（11 发 / 1 不发 / 0 待定）」，
                 // 否则用户分不清「做完了」和「agent 没跑」（UX 评审第 5 条）。
-                approvalsTotal
-                  ? h(
+                h(
                       'div',
                       { className: 'boss-section', id: 'boss-sec-approval' },
                       h(
@@ -2408,8 +2431,7 @@ function createUiKit(React) {
                             ),
                           )
                         : null,
-                    )
-                  : null,
+                    ),
 
                 h(SentSummary, { approvals: data.approvals, t, onOpen: setApprovalOpen }),
 
