@@ -205,6 +205,32 @@ async function writeJsonAtomic(file, value) {
   await fs.rename(tmp, file)
 }
 
+/**
+ * 每天一次改前备份（保留 7 天）。审批文件是「发过什么、谁点了什么」的唯一记录，
+ * 原子写只能防半截文件，防不了逻辑写坏或人工误改，所以每天第一次写盘前留一份。
+ */
+async function backupApprovalsDaily(file) {
+  try {
+    const dir = path.join(path.dirname(file), 'backups')
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 })
+    const day = new Date().toISOString().slice(0, 10)
+    const dest = path.join(dir, `boss_approvals-${day}.json`)
+    try {
+      await fs.stat(dest)
+      return
+    } catch {
+      /* 今天还没有备份，往下走 */
+    }
+    await fs.copyFile(file, dest, fs.constants.COPYFILE_EXCL)
+    const names = (await fs.readdir(dir)).filter((name) => /^boss_approvals-\d{4}-\d{2}-\d{2}\.json$/.test(name)).sort()
+    for (const name of names.slice(0, Math.max(0, names.length - 7))) {
+      await fs.unlink(path.join(dir, name)).catch(() => {})
+    }
+  } catch {
+    /* 备份失败不拦用户操作 */
+  }
+}
+
 /** 每次面板决策落一行审计：出了事能回答「谁在什么时候把哪一条改成了什么」。 */
 async function appendApprovalAudit(entry, options = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR
@@ -1493,6 +1519,7 @@ async function markApprovalUnlocked(id, status, options = {}) {
     delete hit.approvedAt
     delete hit.approvedDraftHash
   }
+  await backupApprovalsDaily(file)
   await writeJsonAtomic(file, { ...doc, items, ts: at })
   await appendApprovalAudit(
     {

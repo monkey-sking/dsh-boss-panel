@@ -101,3 +101,18 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py lint
 - 敌人 AI／战斗 AI：`您好。这个岗的怪物/BOSS 战斗 AI 正是我最熟的一段：研发期 3A TPS 里做过 3 种性格化敌人 AI、行为树分支、AI 对话与动作同步。我可以把这段拆解和配置示例发您，看完再判断合不合。`
 - UE 技术策划：`您好。我在研发期 3A TPS 里做策划侧工具：UE 蓝图调试工具、把配置错误自动定位到具体条目，也接过 LLM 中文语音＋动作同步的对话链路。工具截图和提效前后数据我可以发您过目。`
 - 卡牌／数值：`您好。战斗数值我跟制作人定过一版完整的：伤害、暴击、技能倍率到强度分档，Excel 建模、Python 批量验证。卡牌品类我没做过，但公式与克制结构是通的，可按你们现有框架试算一版给您看。`
+
+## 6. 备份与恢复
+
+`boss_approvals.json` 是「发过什么、谁点了什么」的唯一记录，聊天记录在 BOSS 侧还能找，
+草稿和决策找不回来。因此两侧写盘前都会留一份日备份：
+
+| 写入方 | 触发点 | 位置 | 保留 |
+|---|---|---|---|
+| 面板（index.js `backupApprovalsDaily`） | 每次 `approval_decide` 落盘前，当天第一次才拷 | `<数据目录>/backups/boss_approvals-YYYY-MM-DD.json` | 最近 7 份 |
+| 脚本（`boss_approvals.py` `backup_daily`） | 每次 `save()` 前，当天第一次才拷 | 同上 | 最近 7 份 |
+
+权限 0600、目录 0700。恢复方式：停掉 `boss-approval-send`，把对应日期的备份覆盖回
+`boss_approvals.json`，`python3 boss_approvals.py stats` 核对条数后再启用任务。
+
+不会备份的：发送结果为空的中间态、已过期（30 分钟）的 approved 记录——它们本来就不该发。
