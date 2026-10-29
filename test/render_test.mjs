@@ -198,5 +198,22 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   store.getSnapshot = prev
 }
 
+// 回归：快照还没回来（data=null）时首屏不能崩。
+// 之前页脚直接读 data.host.version，data 为 null 时抛 TypeError，
+// 整个 slot 崩掉 —— 表现就是「面板一片空白」。
+{
+  const prev = store.getSnapshot
+  store.getSnapshot = () => ({ loading: true, data: null, error: null })
+  let okNull = true
+  try {
+    render()
+  } catch (e) {
+    okNull = false
+    console.log('null snapshot threw:', e.message)
+  }
+  store.getSnapshot = prev
+  check('快照为空时首屏不崩（空白面板回归）', okNull)
+}
+
 console.log(ok ? 'RENDER OK' : 'RENDER INCOMPLETE')
 process.exit(ok ? 0 : 1)

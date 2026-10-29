@@ -2253,9 +2253,9 @@ function createUiKit(React) {
                 'p',
                 { className: 'boss-foot' },
                 t('footBuild', {
-                  v: data.host?.version ?? '?',
-                  boot: data.host?.bootAt ? humanTime(data.host.bootAt) : '?',
-                  data: data.updatedAt ? humanTime(data.updatedAt) : '?',
+                  v: data?.host?.version ?? '?',
+                  boot: data?.host?.bootAt ? humanTime(data.host.bootAt) : '?',
+                  data: data?.updatedAt ? humanTime(data.updatedAt) : '?',
                 }),
               ),
             ),
