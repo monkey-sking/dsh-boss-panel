@@ -14,7 +14,8 @@
     "url": "https://github.com/monkey-sking/dsh-boss-panel/issues"
   },
   "scripts": {
-    "test": "node test/all.mjs"
+    "test": "node test/all.mjs",
+    "verify": "node test/all.mjs"
   },
   "description": "DSH 侧边栏 BOSS 直聘求职面板：概览仪表盘 + 面试/会话 Tab，8 状态分类引擎、今日简报、面试日程、详情弹窗",
   "main": "./index.js",

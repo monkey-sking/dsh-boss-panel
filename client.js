@@ -425,7 +425,8 @@ function createUiKit(React) {
       kpiToday: '今天发出',
       kpiWait: '等我回',
       kpiReplied: '有人回',
-      kpiTbd: '面试待定 {n}',
+      kpiTbd: '待定 {n}',
+      upcomingTbd: '· 待定 {n}',
       todayInterview: '今天面试',
       interviewTbdChip: '待定',
       failedTitle: '{n} 条发送失败',
@@ -445,7 +446,7 @@ function createUiKit(React) {
       sentTitleNone: '已发出',
       kpiFailed: '发送失败',
       sentTitle: '已发出',
-      sentLine: '已发出 {n} 条 · 待回 {wait} · 最后 {time}',
+      sentLine: '待回 {wait} · 最后 {time}',
       sentLineMissing: '已发出 {n} 条 · 待回 {wait} · 未进会话 {missing} · 最后 {time}',
       sentLineRead: '{read} 条已读 · {unread} 条未读（对方还没打开）',
       readYes: '已读',
@@ -482,10 +483,19 @@ function createUiKit(React) {
       field_jobId: '岗位链接',
       field_recruiter: '对接人',
       field_tier: '匹配档位',
+      field_company: '公司',
       approvalSub: '点「发出这条」= 10 分钟内自动发给对方，发出后不能收回；点「不发」= 永久移出，之后可点「收回」找回',
       approvalEmpty: '今天的首触都处理完了 —— 没有等你决定的草稿',
       approvalStale: '面板比后台旧，读不到待发数据 —— 重启一次 DSH 就会显示',
       approvalSendLog: '最近发送',
+      sendOk: '已送达',
+      sendOkUnverified: '已发，送达未复核',
+      sendAlready: '早前已发过',
+      sendFactBlocked: '事实闸门拦下：文案含未登记事实',
+      sendRowNotFound: '没找到会话行（职位可能已下线）',
+      sendWrongThread: '打开的不是同一个人，已停手',
+      sendNoInput: '没找到输入框',
+      sendFailed: '发送失败',
       approvalSendLogSub: '最近 8 条，带送达状态；点开看聊天和 JD',
       threadMissing: '会话未建立',
       threadMissingHint: '发出去了，但会话列表里还没有这家 —— 对方可能还没点开，或消息被折叠',
@@ -664,10 +674,19 @@ function createUiKit(React) {
       field_jobId: 'Job link',
       field_recruiter: 'Recruiter',
       field_tier: 'Match tier',
+      field_company: 'Company',
       approvalSub: 'Send = deliver this draft (within 10 min, cannot be undone); Skip = gone for good, revocable',
       approvalEmpty: 'Nothing to approve — every candidate is handled',
       approvalStale: 'Host has not loaded approval data yet — restart DSH once to activate this tab',
       approvalSendLog: 'Recently sent',
+      sendOk: 'delivered',
+      sendOkUnverified: 'sent, delivery unverified',
+      sendAlready: 'already sent earlier',
+      sendFactBlocked: 'blocked by fact gate: unregistered claim',
+      sendRowNotFound: 'no chat row found (posting may be closed)',
+      sendWrongThread: 'opened the wrong thread, stopped',
+      sendNoInput: 'no input box found',
+      sendFailed: 'send failed',
       approvalSendLogSub: 'Last 8, with delivery status; open one for chat and JD',
       threadMissing: 'No thread',
       threadMissingHint: 'Sent, but no chat row yet — the recruiter may not have opened it',
@@ -1018,7 +1037,10 @@ function createUiKit(React) {
       .boss-aq-more { padding: 8px 0 0; }
       .boss-ap-coverage { margin: 6px 0 8px; padding: 4px 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; }
       .boss-wait-consent { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--dsw-alias-label-warning); color: var(--dsw-alias-label-warning); font-size: 12px; }
-      .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; }
+      .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; grid-template-columns: 74px minmax(0, 1fr); }
+      .boss-upcoming-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+      .boss-upcoming-state { flex: 0 0 auto; border-left: 1px solid var(--dsw-alias-border-l2); padding-left: 8px; }
+      .boss-upcoming-next { margin-top: 2px; color: var(--dsw-alias-label-secondary); }
       .boss-kpi-item b { font-size: 16px; font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
       .boss-kpi-sep { color: var(--dsw-alias-label-tertiary); }
       .boss-more { padding-top: 2px; }
@@ -1028,14 +1050,26 @@ function createUiKit(React) {
       .boss-wait-row[data-clickable="true"] { cursor: pointer; }
       .boss-wait-row[data-clickable="true"]:hover { background: var(--dsw-alias-bg-layer-2); }
       .boss-wait-main { min-width: 0; }
-      .boss-wait-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+      .boss-wait-who { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
       .boss-wait-who > * { flex: none; }
       .boss-wait-who > .boss-co { flex: 1 1 auto; }
       .boss-wait-msg { margin-top: 3px; font-size: 13px; line-height: 18px; color: var(--dsw-alias-label-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-      .boss-sent-line { display: flex; align-items: baseline; gap: 8px; padding: 8px 2px; cursor: pointer; border-radius: 6px; min-width: 0; }
+      .boss-sent-line { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; padding: 8px 2px; cursor: pointer; border-radius: 6px; min-width: 0; }
+      .boss-sent-head { display: inline-flex; align-items: baseline; gap: 6px; flex: 0 0 auto; }
+      .boss-sent-headline { flex: 0 1 auto; }
       .boss-sent-line:hover { background: var(--dsw-alias-bg-layer-2); }
       .boss-sent-title { font-size: 13px; font-weight: 500; color: var(--dsw-alias-label-primary); flex: 0 0 auto; }
       .boss-sent-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      @media (max-width: 560px) {
+        .boss-head { flex-wrap: wrap; gap: 4px 12px; }
+        .boss-sent-line { flex-wrap: wrap; row-gap: 2px; }
+        .boss-sent-meta { white-space: normal; overflow: visible; text-overflow: clip; }
+        .boss-wait-row { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+        .boss-wait-row .dp-btn { justify-self: start; }
+        .boss-wait-who .boss-aq-meta { display: none; }
+        .boss-upcoming-row { grid-template-columns: 64px minmax(0, 1fr); }
+        .boss-upcoming-row > .boss-nx { display: none; }
+      }
       .boss-sent-toggle { margin-left: auto; font-size: 11px; color: var(--dsw-alias-label-secondary); }
       .boss-ap-foot-hint { font-size: 12px; color: var(--dsw-alias-label-secondary); }
 
@@ -1206,7 +1240,7 @@ function createUiKit(React) {
         h(UI.SectionTitle, { style: { marginTop: 14 } }, t('chat')),
         h(
           'div',
-          { className: 'boss-chat' },
+          { className: 'boss-chat', ref: chatRef, tabIndex: 0, role: 'region', 'aria-label': `${t('approvalChat')}（${msgs.length}）` },
           msgs.length
             ? msgs.map((item, index) =>
                 h(
@@ -1254,7 +1288,6 @@ function createUiKit(React) {
           'span',
           null,
           h(UI.Tag, { tone: TAG_TONE[STATE_KIND[item.state]] ?? 'outline' }, item.state),
-          side === 'them' ? h(UI.Tag, { tone: 'warn' }, t('replyNeeded')) : null,
         ),
         h(
           'span',
@@ -1297,7 +1330,13 @@ function createUiKit(React) {
           ),
           meta ? h('div', { className: 'boss-sub' }, meta) : null,
         ),
-        h('span', { className: 'boss-nx' }, item.next || '—'),
+        h(
+          'span',
+          { className: 'boss-nx' },
+          side === 'them' && (item.owed || /待回复|待你决定/.test(item.state || ''))
+            ? t('goReply')
+            : item.next || '—',
+        ),
       )
     }
 
@@ -1665,8 +1704,13 @@ function createUiKit(React) {
           },
           h(
             'span',
-            { className: 'boss-sent-title' },
-            replied ? t('sentTitle') : t('sentTitleNone'),
+            { className: 'boss-sent-head' },
+            h(
+              'span',
+              { className: 'boss-sent-title' },
+              replied ? t('sentTitle') : t('sentTitleNone'),
+            ),
+            h('span', { className: 'boss-sent-toggle' }, expanded ? '▾' : '▸'),
           ),
           (() => {
             const known = items.filter((item) => item.readState === 'read' || item.readState === 'delivered')
@@ -1678,26 +1722,33 @@ function createUiKit(React) {
               t('sentLineRead', { read, unread: known.length - read }),
             )
           })(),
-          h(
-            'span',
-            { className: 'boss-sent-meta' },
-            headline,
-          ),
-          h('span', { className: 'boss-sent-toggle' }, expanded ? '▾' : '▸'),
+          h('span', { className: 'boss-sent-meta boss-sent-headline' }, headline),
         ),
         expanded ? h(SentLog, { approvals, t, onOpen }) : null,
       )
     }
 
     // sendResult 可能是 {status, ok, detail, tail, fit} 对象，直接 String() 会渲染成 [object Object]。
-    const sendText = (item) => {
+    const sendText = (item, t) => {
       const r = item?.sendResult
       if (!r) return ''
       if (typeof r === 'string') return r
-      const parts = [r.status, r.at, r.tail, r.detail, r.fit].filter((x) => typeof x === 'string' && x)
-      // sent 但 tail 为空 = 发出去了但没拿到送达回执，别装作送达了（审计 #6）。
-      if (item?.status === 'sent' && !r.tail) parts.push('送达未复核')
-      return parts.join(' · ')
+      const status = String(r.status || '')
+      const tail = typeof r.tail === 'string' ? r.tail.trim() : ''
+      // 只讲人话：status 码、lane/track/evidence 这些是给排查用的，不该出现在列表里。
+      if (status === 'sent') {
+        // tail 常常就是「[送达]」这类标记，跟状态重复；只在它带额外信息时才拼上去。
+        const extra = tail.replace(/^\[?\s*(已?送达|已读)\s*\]?/, '').trim()
+        return extra ? `${t('sendOk')} · ${extra}` : t('sendOk')
+      }
+      if (status === 'already') return t('sendAlready')
+      if (status === 'fact_blocked') return t('sendFactBlocked')
+      if (status === 'row_not_found') return t('sendRowNotFound')
+      if (status === 'wrong_thread') return t('sendWrongThread')
+      if (status === 'no_input') return t('sendNoInput')
+      if (!status) return t('sendFailed')
+      const detail = typeof r.detail === 'string' && r.detail ? ` · ${r.detail}` : ''
+      return `${t('sendFailed')}${detail || ` · ${status}`}`
     }
 
     function SentLog({ approvals, t, onOpen }) {
@@ -1748,8 +1799,8 @@ function createUiKit(React) {
                   ? null
                   : h(UI.Tag, { tone: 'warn', title: t('threadMissingHint') }, t('threadMissing')),
               ),
-              sendText(item)
-                ? h('div', { className: 'boss-aq-draft' }, sendText(item).slice(0, 120))
+              sendText(item, t)
+                ? h('div', { className: 'boss-aq-draft' }, sendText(item, t).slice(0, 120))
                 : null,
             ),
           ),
@@ -1805,13 +1856,21 @@ function createUiKit(React) {
         ['salary', orMissing(data.salary)],
         ['city', orMissing(data.city)],
         ['recruiter', orMissing([data.recruiter, data.recruiterTitle].filter(Boolean).join(' / '))],
-        ['ab', orMissing(data.tier)],
-        ['company', orMissing(companyLine)],
+        ['field_tier', orMissing(data.tier)],
+        ['field_company', orMissing(companyLine)],
       ]
       const filled = (data.coverage ? Object.values(data.coverage).filter(Boolean).length : 0)
       const total = data.coverage ? Object.keys(data.coverage).length : 0
       const missingLabels = (data.missing ?? []).map((key) => t(`field_${key}`)).join('、')
       const msgs = data.msgs ?? []
+      // 弹窗里的聊天默认停在最早一条，得滚到底才看得到对方刚说的话。
+      const chatRef = React.useRef(null)
+      const shownMsgs = msgs.slice(-30)
+      const olderCount = msgs.length - shownMsgs.length
+      React.useEffect(() => {
+        const el = chatRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, [shownMsgs.length])
       const coverageLine = data.coverage
         ? t('coverageLine', { filled, total, missing: missingLabels || t('coverageComplete') })
         : null
@@ -1867,11 +1926,7 @@ function createUiKit(React) {
                 { className: 'boss-aq-badge' },
                 h(UI.Tag, { tone: APPROVAL_TONE[status] ?? 'outline' }, t(APPROVAL_LABEL[status] ?? 'approvalStatusPending')),
                 data.sendResult && data.sendResult.status
-                  ? h(
-                      'span',
-                      { className: 'boss-sub' },
-                      `${data.sendResult.status} · ${data.sendResult.at || ''} ${data.sendResult.detail || ''}`,
-                    )
+                  ? h('span', { className: 'boss-sub' }, sendText(data, t))
                   : null,
               ),
               data.draft
@@ -2372,11 +2427,18 @@ function createUiKit(React) {
                     h(
                       'div',
                       { className: 'boss-section-top' },
-                      h(UI.SectionTitle, null, `${t('upcoming')}（${interviews.length}）`),
+                      h(
+                        UI.SectionTitle,
+                        null,
+                        `${t('upcoming')}（${interviews.length}）` +
+                          (tbdRows.length ? ` ${t('upcomingTbd', { n: tbdRows.length })}` : ''),
+                      ),
                     ),
                     interviews.length
                       ? h(UpcomingList, { interviews, t, onOpen: open })
-                      : h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('interviewNone'))),
+                      : tbdRows.length
+                        ? null
+                        : h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('interviewNone'))),
                     tbdRows.length
                       ? h(
                           'div',
@@ -2393,11 +2455,16 @@ function createUiKit(React) {
                               h(
                                 'div',
                                 { className: 'boss-upcoming-main' },
-                                h('div', { className: 'boss-co' }, item.company || '—'),
-                                h('div', { className: 'boss-sub' }, item.job || item.who || '—'),
+                                h(
+                                  'div',
+                                  { className: 'boss-upcoming-line' },
+                                  h('span', { className: 'boss-co' }, item.company || '—'),
+                                  h('span', { className: 'boss-sub' }, item.job || item.who || '—'),
+                                  h('span', { className: 'boss-sub boss-upcoming-state' }, item.state || '—'),
+                                ),
+                                // 待定的关键信息是「下一步该做什么」，不是日期（日期本来就还没定）。
+                                item.next ? h('div', { className: 'boss-sub boss-upcoming-next' }, item.next) : null,
                               ),
-                              h('span', { className: 'boss-sub' }, item.state || '—'),
-                              h('span', { className: 'boss-nx' }, item.next || '—'),
                             ),
                           ),
                         )
@@ -2469,7 +2536,7 @@ function createUiKit(React) {
                                 { key: `${item.id}|fail`, className: 'boss-fail-row' },
                                 h('span', { className: 'boss-co' }, item.company || '—'),
                                 h('span', { className: 'boss-aq-meta' }, formatWhen(item.decidedAt || item.addedAt)),
-                                h('span', { className: 'boss-fail-why' }, sendText(item).slice(0, 80) || '—'),
+                                h('span', { className: 'boss-fail-why' }, sendText(item, t).slice(0, 80) || '—'),
                                 h(
                                   UI.Button,
                                   {

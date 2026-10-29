@@ -40,11 +40,21 @@ const calls = []
 globalThis.fetch = async (url, init) => {
   const payload = JSON.parse(init?.body || '{}')
   calls.push(payload)
-  return {
-    ok: true,
-    status: 200,
-    json: async () => ({ ok: true, value: { ok: true, id: payload.id, status: payload.status } }),
-  }
+  // approval_detail 要带聊天与 JD：弹窗里的聊天区曾漏声明 ref 直接白屏，测试必须走到这段。
+  const detail =
+    payload.op === 'approval_detail'
+      ? {
+          id: payload.id,
+          draft: '示例草稿',
+          jdText: '示例 JD 正文',
+          companyDetail: { industry: '互联网' },
+          msgs: [
+            { mine: false, text: '示例对方消息' },
+            { mine: true, text: '示例我方消息' },
+          ],
+        }
+      : { ok: true, id: payload.id, status: payload.status }
+  return { ok: true, status: 200, json: async () => ({ ok: true, value: detail }) }
 }
 
 const src = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
@@ -179,6 +189,14 @@ const approveBtn = findAll(tree2, (n) => n.props?.onClick && textOf(n) === 'appr
 const skipBtn = findAll(tree2, (n) => n.props?.onClick && textOf(n) === 'approvalSkip')
 check('弹窗里有「通过并发送 / 跳过」', approveBtn.length === 1 && skipBtn.length === 1)
 check('弹窗标题带公司名', out2.texts.some((x) => typeof x === 'string' && x.includes(firstCompany)))
+// 弹窗里的聊天区曾经引用未声明的 chatRef（DetailModal 里有，ApprovalModal 里没声明），
+// 一打开就 ReferenceError 白屏。重入函数组件会重置 useState，没法在树里复现，
+// 所以这里守源码契约：两个弹窗都必须各自声明并绑定 chatRef。
+check(
+  '两个弹窗各自声明并绑定聊天区 ref',
+  (src.match(/const chatRef = React\.useRef\(null\)/g) || []).length >= 2 &&
+    (src.match(/ref: chatRef/g) || []).length >= 2,
+)
 
 // —— 5) 点通过 → POST ——
 approveBtn[0].props.onClick()
