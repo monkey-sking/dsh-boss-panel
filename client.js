@@ -442,6 +442,8 @@ function createUiKit(React) {
       goReply: '去回复',
       consentNeeded: '待同意发简历',
       goReplyHint: '新标签打开 BOSS 聊天，公司名已复制到剪贴板',
+      openBlocked: '浏览器没接住这次打开 —— 「{company}」已复制，点右边手动打开',
+      openManual: '打开 BOSS 聊天',
       sentNone: '暂无回复',
       sentTitleNone: '已发出',
       kpiFailed: '发送失败',
@@ -639,6 +641,8 @@ function createUiKit(React) {
       goReply: 'Reply',
       consentNeeded: 'Resume consent pending',
       goReplyHint: 'Opens BOSS chat in a new tab, company name copied',
+      openBlocked: 'Could not open a tab — "{company}" is copied; open it manually',
+      openManual: 'Open BOSS chat',
       sentNone: 'No replies yet',
       sentTitleNone: 'Sent — no replies yet',
       kpiFailed: 'Failed',
@@ -1036,6 +1040,20 @@ function createUiKit(React) {
       .boss-fail-why { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .boss-aq-more { padding: 8px 0 0; }
       .boss-ap-coverage { margin: 6px 0 8px; padding: 4px 8px; border-radius: 6px; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 12px; }
+      .boss-go-fallback {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--dsw-alias-border-l2);
+        background: var(--dsw-alias-bg-layer-2);
+        font-size: 13px;
+        color: var(--dsw-alias-label-secondary);
+      }
+      .boss-go-fallback a { color: var(--dsw-alias-brand-primary); text-decoration: underline; }
       .boss-wait-consent { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--dsw-alias-label-warning); color: var(--dsw-alias-label-warning); font-size: 12px; }
       .boss-upcoming-tbd .boss-upcoming-row { opacity: .95; grid-template-columns: 74px minmax(0, 1fr); }
       .boss-upcoming-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
@@ -1603,6 +1621,51 @@ function createUiKit(React) {
 
     /** JD 按空行切段，读屏能一段段跳，低视力用户不会被一整块 12px 长文砸（a11y 评审 #11）。 */
 
+    /** BOSS 聊天页地址：面板只负责把用户送过去，不代发消息。 */
+    const BOSS_CHAT_URL = 'https://www.zhipin.com/web/geek/chat'
+
+    /** 剪贴板在 Electron / 非安全上下文里可能被拒，失败就退回 textarea + execCommand。 */
+    function copyText(text) {
+      const val = String(text || '')
+      if (!val) return
+      try {
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(val).catch(() => fallbackCopy(val))
+          return
+        }
+      } catch {}
+      fallbackCopy(val)
+    }
+    function fallbackCopy(val) {
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = val
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      } catch {}
+    }
+
+    /**
+     * 「去回复」：复制公司名 + 在新标签打开 BOSS 聊天。
+     * 返回是否真的开出了窗口 —— Electron 里 window.open 可能被拦，拦了要让用户有后路，
+     * 不能点了毫无反应（用户实测就是点了没动静）。
+     */
+    function openBossChat(company) {
+      copyText(company)
+      let win = null
+      try {
+        win = window.open(BOSS_CHAT_URL, '_blank', 'noopener')
+      } catch {
+        win = null
+      }
+      return !!win
+    }
+
     /** JD 按空行切段，读屏能一段段跳，低视力用户不会被一整块 12px 长文砸（a11y 评审 #11）。 */
     function jdParagraphs(text) {
       return String(text || '')
@@ -1616,7 +1679,7 @@ function createUiKit(React) {
      * 「等我回」：只放球在我这边的会话（对方最后一句、状态是待回复/待你决定）。
      * 首屏第一块，因为这是唯一需要用户动手的地方。
      */
-    function WaitRows({ items, t, onOpen }) {
+    function WaitRows({ items, t, onOpen, onReply }) {
       if (!items.length) {
         return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('waitEmpty')))
       }
@@ -1663,7 +1726,7 @@ function createUiKit(React) {
                 title: t('goReplyHint'),
                 onClick: (event) => {
                   event?.stopPropagation?.()
-                  openBossChat(item.company)
+                  onReply?.(item.company)
                 },
               },
               t('goReply'),
@@ -2081,6 +2144,8 @@ function createUiKit(React) {
       const [approvalSeen, setApprovalSeen] = React.useState(() => new Set())
       const [approvalBusy, setApprovalBusy] = React.useState(false)
       const [approvalBusyId, setApprovalBusyId] = React.useState(null)
+      // 「去回复」被浏览器拦下时记住是哪家，列表下方给一个可点的兜底链接。
+      const [goBlocked, setGoBlocked] = React.useState(null)
 
       const data = snapshot.data
       const loading = snapshot.loading && !data
@@ -2488,7 +2553,24 @@ function createUiKit(React) {
                     h(UI.SectionTitle, null, `${t('waitTitle')}（${waitRows.length}）`),
                     h('span', { className: 'boss-section-hint' }, t('waitSub')),
                   ),
-                  h(WaitRows, { items: waitRows, t, onOpen: open }),
+                  h(WaitRows, {
+                    items: waitRows,
+                    t,
+                    onOpen: open,
+                    onReply: (company) => setGoBlocked(openBossChat(company) ? null : company),
+                  }),
+                  goBlocked
+                    ? h(
+                        'div',
+                        { className: 'boss-go-fallback' },
+                        h('span', null, t('openBlocked', { company: goBlocked })),
+                        h(
+                          'a',
+                          { href: BOSS_CHAT_URL, target: '_blank', rel: 'noopener noreferrer' },
+                          t('openManual'),
+                        ),
+                      )
+                    : null,
                 ),
 
                 // 待发首触常驻：0 条也要有一行「今日候选 12（11 发 / 1 不发 / 0 待定）」，

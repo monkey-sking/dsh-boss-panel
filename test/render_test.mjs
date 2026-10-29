@@ -198,6 +198,18 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   store.getSnapshot = prev
 }
 
+// 回归：「去回复」不能点了没反应 —— 之前 client.js 调用了 openBossChat，
+// 但那个函数根本没定义（ReferenceError 在 onClick 里被吞掉，用户看到的就是「点了没反应」）。
+// 重入函数组件会重置 state，树里没法复现点击，所以这里守源码契约。
+{
+  const tree = render()
+  const texts = [], classes = new Set()
+  walk(tree, texts, classes)
+  check('首屏有「去回复」按钮文案', texts.includes('goReply'))
+  check('openBossChat 真的定义了（含 BOSS 聊天地址）', src.includes('function openBossChat(') && src.includes("zhipin.com/web/geek/chat"))
+  check('点击走 onReply 并有兜底链接', src.includes('onReply?.(item.company)') && src.includes('boss-go-fallback'))
+}
+
 // 回归：快照还没回来（data=null）时首屏不能崩。
 // 之前页脚直接读 data.host.version，data 为 null 时抛 TypeError，
 // 整个 slot 崩掉 —— 表现就是「面板一片空白」。
