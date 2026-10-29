@@ -201,6 +201,20 @@ node test/shapes_test.mjs        # 脏形状 fixture：空字段/超长文案/UT
 字段来源、必填时机、空值语义（「未采集」而不是空白）见 [docs/data-contract.md](docs/data-contract.md)。
 体检：`boss_approvals.py audit`（待发缺 JD/职位号 → `BLOCK` + exit 1）、`boss_approvals.py lint`（首触文案四条硬伤 + 同批模板撞车）。
 
+
+## 回复：草稿预生成，点击即发（2026-10-29）
+
+「去回复」不再是把用户丢进浏览器手打，而是一条闭环：
+
+1. `boss_reply.py draft`（noagent 每 5 分钟，最多 2 条）挑出「对方最后一句在等你」且不是拒信/占位符的会话，取最近 6 条聊天，调用 `dsh headless` 生成 ≤70 字回复（事实边界写死在 prompt：15 年研发、3 种性格化战斗 AI、复杂行为树、UE 蓝图调试工具、Aion 上架；《Code:Z》只能写「研发阶段，未上线」；不承诺发附件）。
+2. 草稿落在 `boss_reply_drafts.json`，随快照进面板（`replyDrafts`）。
+3. 面板点「去回复」打开回复弹窗：对方原话在上、草稿在下，可直接改字；底部唯一 primary 是「发送」。
+4. 「发送」调 `reply_send`，只写 `~/.hermes/state/boss_reply_command.json`（0600，status=queued）。
+5. `boss_approval_runner.py` 每 2 分钟取走 queued，走同一条 `boss_outbox.sh`：事实闸门 + 线程闸门照旧，结果按 id 回写 sent/failed。
+
+授权语义：**点「发送」= 只授权这一条**；改过的字才是发出去的字。
+已知边界：只处理「对方最后一句」的会话；对方问附件/简历时草稿只说「发能力拆解」，不会也不该自动传文件。
+
 ## 安全边界（2026-10-28 只读安全评审的实测结论）
 
 - **RPC 不是裸路由**：`/api/boss-panel.rpc` 由宿主 `ctx.connection.fetch` 承载，无凭据 `401`、

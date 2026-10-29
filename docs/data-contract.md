@@ -156,3 +156,12 @@ python3 ~/.local/share/dsh-runtime/scripts/boss_approvals.py lint
 
 行为：只**新增**不存在的 id，绝不覆盖已有条目的事实字段；jdText 从同轮 `r<日期>_<时段>_jd.json`
 按 jobId 取；解析不到公司/岗位/草稿/jobId 的整条跳过并打印原因。
+
+## 11. 回复草稿与回复指令（2026-10-29）
+
+| 文件 | 写入方 | 字段 | 空值语义 |
+| --- | --- | --- | --- |
+| `boss_reply_drafts.json` | `boss_reply.py draft` | `updated`, `items[{company,name,lastMsg,stamp,job,draft,chars,generatedAt}]` | 没有条目 = 还没生成，面板显示空白框让用户手写 |
+| `~/.hermes/state/boss_reply_command.json` | 面板 `reply_send` | `items[{id,company,msg,status:queued/sent/failed,result,createdAt,settledAt}]` | 没有文件 = 没有待发回复 |
+
+约束：`msg` 1–300 字；指令文件 0600；runner 每轮把 queued 交给 `boss_outbox.sh`，sent 才算发出；`failed` 保留原因，用户在面板重发会新建一条指令。

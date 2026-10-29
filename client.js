@@ -527,6 +527,16 @@ function createUiKit(React) {
       dataStale: '数据已经 {n} 小时没更新 —— 后台采集可能没在跑，下面的数字不是今天的',
       draftIssues: '草稿 {n} 处硬伤',
       draftIssuesHint: '导入时文案检查发现：{list}',
+      replyTitle: '回复 {company}',
+      replyLast: '对方最后一句',
+      replyDraftLabel: '回复内容（已按对话生成，可直接改）',
+      replyPlaceholder: '写一句就行，发送后 2 分钟内后台发出',
+      replySend: '发送',
+      replySending: '排队中…',
+      replyQueued: '已排队：2 分钟内后台发出，发出后消息会出现在会话里',
+      replyOpenBoss: '在 BOSS 里打开',
+      replyTooLong: '超过 300 字，删一点再发',
+      close: '关闭',
       repeat7: '{n} 天前投过',
       repeat30: '{n} 天前投过',
       repeatHint: '同一家 7 天内重发首触不加曝光，还会把第二条压在同一条未读下面',
@@ -717,6 +727,16 @@ function createUiKit(React) {
       dataStale: 'Data has not updated for {n} h — the collector may be down; these numbers are not from today',
       draftIssues: '{n} draft issue(s)',
       draftIssuesHint: 'Copy checks flagged: {list}',
+      replyTitle: 'Reply to {company}',
+      replyLast: 'Their last message',
+      replyDraftLabel: 'Reply (pre-filled from the thread, edit freely)',
+      replyPlaceholder: 'One line is enough; sent within 2 minutes',
+      replySend: 'Send',
+      replySending: 'Queuing…',
+      replyQueued: 'Queued: sends within 2 minutes',
+      replyOpenBoss: 'Open in BOSS',
+      replyTooLong: 'Over 300 characters',
+      close: 'Close',
       repeat7: 'contacted {n}d ago',
       repeat30: 'contacted {n}d ago',
       repeatHint: 'Re-sending within 7 days adds no exposure and stacks under the same unread thread',
@@ -1017,6 +1037,22 @@ function createUiKit(React) {
       .boss-ap-draft { font-size: 13px; line-height: 20px; padding: 8px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; word-break: break-word; }
       .boss-ap-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .boss-ap-skip { color: var(--dsw-alias-state-error-primary); }
+      /* 回复弹窗：对方原话在上、可改草稿在下，发送是唯一 primary。 */
+      .boss-reply { display: flex; flex-direction: column; gap: 10px; }
+      .boss-reply-last { background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 8px 10px; }
+      .boss-reply-who { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+      .boss-reply-last p { margin: 4px 0 0; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-primary); }
+      .boss-reply-job { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-reply-label { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-reply-text { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; line-height: 20px;
+        padding: 8px 10px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1);
+        background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); resize: vertical; }
+      .boss-reply-text:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+      .boss-reply-warn { font-size: 12px; color: var(--dsw-alias-state-error-primary); }
+      .boss-reply-acts { display: flex; align-items: center; gap: 8px; }
+      .boss-reply-open { margin-right: auto; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+      .boss-reply-count { font-size: 11px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+      .boss-reply-notice { font-size: 12px; color: var(--dsw-alias-state-success-primary); padding: 4px 2px; }
       .boss-ap-jd-p { margin: 0 0 8px; }
       .boss-ap-jd-p:last-child { margin-bottom: 0; }
       .boss-ap-jd { margin: 0; font-size: 13px; line-height: 20px; tab-size: 4; white-space: pre-wrap; word-break: break-word; max-height: 24vh; overflow: auto; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 10px 12px; }
@@ -1679,6 +1715,60 @@ function createUiKit(React) {
      * 「等我回」：只放球在我这边的会话（对方最后一句、状态是待回复/待你决定）。
      * 首屏第一块，因为这是唯一需要用户动手的地方。
      */
+
+    /**
+     * 「去回复」：草稿已经由后台生成好，用户只改字、点发送 —— 不用手打、不用切浏览器。
+     * 发送走 reply_send → 指令文件 → runner 下一轮用同一条发件箱发。
+     */
+    function ReplyModal({ company, t, draft, lastMsg, job, busy, onClose, onSend }) {
+      const [text, setText] = React.useState(draft || '')
+      React.useEffect(() => {
+        setText(draft || '')
+      }, [company, draft])
+      const chars = (text || '').length
+      const canSend = chars > 0 && chars <= 300 && !busy
+      return h(
+        UI.Modal,
+        {
+          open: true,
+          title: t('replyTitle', { company }),
+          onClose,
+          size: 'md',
+          footer: h(
+            'div',
+            { className: 'boss-reply-acts' },
+            h('a', { className: 'boss-reply-open', href: BOSS_CHAT_URL, target: '_blank', rel: 'noopener noreferrer' }, t('replyOpenBoss')),
+            h('span', { className: 'boss-reply-count' }, `${chars}/300`),
+            h(UI.Button, { variant: 'ghost', onClick: onClose }, t('close')),
+            h(UI.Button, { variant: 'primary', disabled: !canSend, onClick: () => canSend && onSend(text.trim()) }, busy ? t('replySending') : t('replySend')),
+          ),
+        },
+        h(
+          'div',
+          { className: 'boss-reply' },
+          lastMsg
+            ? h(
+                'div',
+                { className: 'boss-reply-last' },
+                h('span', { className: 'boss-reply-who' }, t('replyLast')),
+                h('p', null, lastMsg),
+              )
+            : null,
+          job ? h('div', { className: 'boss-reply-job' }, job) : null,
+          h('label', { className: 'boss-reply-label', htmlFor: 'boss-reply-text' }, t('replyDraftLabel')),
+          h('textarea', {
+            id: 'boss-reply-text',
+            className: 'boss-reply-text',
+            rows: 5,
+            value: text,
+            placeholder: t('replyPlaceholder'),
+            onChange: (e) => setText(e.target.value),
+          }),
+          chars > 300 ? h('div', { className: 'boss-reply-warn' }, t('replyTooLong')) : null,
+        ),
+      )
+    }
+
     function WaitRows({ items, t, onOpen, onReply }) {
       if (!items.length) {
         return h('div', { className: 'boss-action-empty' }, h(UI.EmptyState, null, t('waitEmpty')))
@@ -2145,7 +2235,9 @@ function createUiKit(React) {
       const [approvalBusy, setApprovalBusy] = React.useState(false)
       const [approvalBusyId, setApprovalBusyId] = React.useState(null)
       // 「去回复」被浏览器拦下时记住是哪家，列表下方给一个可点的兜底链接。
-      const [goBlocked, setGoBlocked] = React.useState(null)
+      const [replyOpen, setReplyOpen] = React.useState(null)
+      const [replyBusy, setReplyBusy] = React.useState(false)
+      const [replyNotice, setReplyNotice] = React.useState('')
 
       const data = snapshot.data
       const loading = snapshot.loading && !data
@@ -2243,6 +2335,24 @@ function createUiKit(React) {
       // 同一家公司不管从哪个列表点进来，看到的都该是同一个弹窗：
       // 有审批条目的（面板里的候选 / 已发 / 已跳过）→ 审批弹窗（JD·公司·完整聊天·状态）；
       // 没有审批条目的老会话 → 原来的公司详情弹窗。
+      const replyDrafts = data?.replyDrafts?.items ?? []
+      const replyDraftOf = (company) => replyDrafts.find((it) => it.company === company) || null
+
+      // 「去回复」：直接用后台已生成的草稿，用户只改字 + 点发送，不必手打、不必切浏览器。
+      const sendReply = async (company, text) => {
+        setReplyBusy(true)
+        try {
+          await callHost({ op: 'reply_send', company, text })
+          setReplyNotice(t('replyQueued'))
+          setReplyOpen(null)
+          await props.refresh?.()
+        } catch (err) {
+          setReplyNotice(String(err?.message || err))
+        } finally {
+          setReplyBusy(false)
+        }
+      }
+
       const open = (company) => {
         const hit = (data?.approvals?.items ?? []).find((item) => item.company === company)
         if (hit) {
@@ -2557,19 +2667,10 @@ function createUiKit(React) {
                     items: waitRows,
                     t,
                     onOpen: open,
-                    onReply: (company) => setGoBlocked(openBossChat(company) ? null : company),
+                    onReply: (company) => setReplyOpen(company),
                   }),
-                  goBlocked
-                    ? h(
-                        'div',
-                        { className: 'boss-go-fallback' },
-                        h('span', null, t('openBlocked', { company: goBlocked })),
-                        h(
-                          'a',
-                          { href: BOSS_CHAT_URL, target: '_blank', rel: 'noopener noreferrer' },
-                          t('openManual'),
-                        ),
-                      )
+                  replyNotice
+                    ? h('div', { className: 'boss-reply-notice' }, replyNotice)
                     : null,
                 ),
 
@@ -2760,6 +2861,18 @@ function createUiKit(React) {
               busy: approvalBusy,
               onClose: () => setApprovalOpen(null),
               onDecide: decideApproval,
+            })
+          : null,
+        replyOpen
+          ? h(ReplyModal, {
+              company: replyOpen,
+              t,
+              draft: replyDraftOf(replyOpen)?.draft ?? '',
+              lastMsg: replyDraftOf(replyOpen)?.lastMsg ?? '',
+              job: replyDraftOf(replyOpen)?.job ?? '',
+              busy: replyBusy,
+              onClose: () => setReplyOpen(null),
+              onSend: (text) => sendReply(replyOpen, text),
             })
           : null,
       )

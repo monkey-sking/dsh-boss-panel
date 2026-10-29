@@ -532,6 +532,7 @@ function fileSet(dataDir) {
     blacklist: path.join(dataDir, 'outsourcing_blacklist.json'),
     pending: path.join(dataDir, 'boss_pending_decisions.json'),
     approvals: path.join(dataDir, 'boss_approvals.json'),
+    replyDrafts: path.join(dataDir, 'boss_reply_drafts.json'),
     resumeVersions: path.join(dataDir, 'resume_versions.json'),
     factGate: path.join(os.homedir(), '.hermes/scripts/boss_fact_gate.py'),
     resumeGate: path.join(os.homedir(), '.hermes/scripts/boss_resume_gate.py'),
@@ -686,6 +687,7 @@ export async function buildSnapshot(options = {}) {
     blacklistDoc,
     pendingDoc,
     approvalsDoc,
+    replyDraftsDoc,
     apptDoc,
     handledDoc,
     resumeVersionsDoc,
@@ -702,6 +704,7 @@ export async function buildSnapshot(options = {}) {
       readCached(files.blacklist, {}),
       readCached(files.pending, { items: [] }),
       readCached(files.approvals, { items: [] }),
+      readCached(files.replyDrafts, { items: [] }),
       readCached(path.join(dataDir, 'appointments.json'), { items: [] }),
       readCached(files.handled, {}),
       readCached(files.resumeVersions, { resumes: {} }),
@@ -720,6 +723,7 @@ export async function buildSnapshot(options = {}) {
     blacklistDoc.mtime,
     pendingDoc.mtime,
     approvalsDoc.mtime,
+    replyDraftsDoc.mtime,
     apptDoc.mtime,
     handledDoc.mtime,
     resumeVersionsDoc.mtime,
@@ -1275,6 +1279,7 @@ export async function buildSnapshot(options = {}) {
     recentDays,
     pending,
     approvals,
+    replyDrafts: normalizeReplyDrafts(replyDraftsDoc.value),
     agentAudit,
     contacts: contacts.slice(-80).reverse(),
   }
@@ -1306,6 +1311,40 @@ const hardGateOf = (jd) => {
 
 const APPROVAL_STATUSES = ['pending', 'approved', 'skipped', 'sent', 'failed']
 const APPROVAL_STATUS_ORDER = { approved: 0, pending: 1, failed: 2, sent: 3, skipped: 4 }
+
+// 「该你回」的回复草稿：由 boss_reply.py 预生成（dsh headless），面板只读 + 可编辑；
+// 用户点「发送」后写指令文件，runner 下一轮走同一条发件箱。
+export function normalizeReplyDrafts(doc) {
+  const items = (doc?.items ?? [])
+    .filter((it) => it && it.company && it.draft)
+    .map((it) => ({
+      company: String(it.company),
+      name: it.name ?? '',
+      job: it.job ?? '',
+      lastMsg: it.lastMsg ?? '',
+      draft: String(it.draft),
+      chars: Number(it.chars) || String(it.draft).length,
+      generatedAt: it.generatedAt ?? '',
+    }))
+  return { items, updated: doc?.updated ?? '' }
+}
+
+const REPLY_CMD = path.join(os.homedir(), '.hermes/state/boss_reply_command.json')
+
+export async function queueReply(company, text, options = {}) {
+  const name = String(company ?? '').trim()
+  const msg = String(text ?? '').trim()
+  if (!name) throw operationError('missing_company', '缺少公司名')
+  if (!msg) throw operationError('empty_reply', '回复内容是空的')
+  if (msg.length > 300) throw operationError('reply_too_long', '回复超过 300 字')
+  const file = options.replyCmdFile ?? REPLY_CMD
+  const doc = await readJsonStrict(file, { items: [] })
+  const items = Array.isArray(doc.items) ? doc.items : []
+  const id = `reply-${Date.now().toString(36)}`
+  items.push({ id, company: name, msg, status: 'queued', createdAt: new Date().toISOString() })
+  await writeJsonAtomic(file, { updated: new Date().toISOString(), items: items.slice(-50) })
+  return { ok: true, id, company: name }
+}
 
 function normalizeApproval(item) {
   if (!item || typeof item !== 'object') return null
@@ -1752,6 +1791,10 @@ export function apply(ctx, config = {}) {
           ok: true,
           value: await markApproval(payload.id, status, { dataDir, draftHash: payload.draftHash }),
         })
+      }
+      if (op === 'reply_send') {
+        const queued = await queueReply(payload.company, payload.text, options)
+        return { ok: true, ...queued }
       }
       if (op === 'ping') {
         return jsonResponse({ ok: true, value: { dataDir } })
