@@ -11,9 +11,9 @@ const threadsFile = path.join(tmp, 'boss_threads.json')
 // 会话仍该我回：对方最后发言，且不是拒信/系统卡。
 fs.writeFileSync(threadsFile, JSON.stringify({
   rows: [
-    { company: '示例公司', name: '王女士', time: '11:00', last: '您好，有作品链接吗？', lastFrom: '对方', state: 'WAIT', owed: 'True' },
-    { company: '已拒公司', name: '李女士', time: '10:00', last: '不好意思，不太合适哦', lastFrom: '对方', state: 'WAIT', owed: 'False' },
-    { company: '我末条公司', name: '张先生', time: '09:00', last: '好的，等您回复', lastFrom: '我', state: 'WAIT', owed: 'False' },
+    { company: '示例公司', name: '招聘方甲', time: '11:00', last: '您好，有作品链接吗？', lastFrom: '对方', state: 'WAIT', owed: 'True' },
+    { company: '已拒公司', name: '招聘方乙', time: '10:00', last: '不好意思，不太合适哦', lastFrom: '对方', state: 'WAIT', owed: 'False' },
+    { company: '我末条公司', name: '招聘方丙', time: '09:00', last: '好的，等您回复', lastFrom: '我', state: 'WAIT', owed: 'False' },
   ],
 }))
 
