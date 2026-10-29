@@ -227,5 +227,16 @@ const check = (name, pass) => { console.log((pass ? '✓ ' : '✗ ') + name); if
   check('快照为空时首屏不崩（空白面板回归）', okNull)
 }
 
+// 回归：概览页的 KPI 按钮点了要能跳到对应区块 —— 之前 client.js 直接调 scrollToSection，
+// 但那个函数从来没定义过（和 openBossChat 同一类：ReferenceError 被吞成「点了没反应」）。
+{
+  check('scrollToSection 真的定义了', /(?:const|function)\s+scrollToSection\b/.test(src))
+  const used = [...src.matchAll(/scrollToSection\('([^']+)'\)/g)].map((m) => m[1])
+  check(
+    'KPI 跳转目标都存在（调用与区块 id 一一对应）',
+    used.length > 0 && used.every((id) => src.includes(`id: '${id}'`)),
+  )
+}
+
 console.log(ok ? 'RENDER OK' : 'RENDER INCOMPLETE')
 process.exit(ok ? 0 : 1)

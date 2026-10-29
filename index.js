@@ -1279,7 +1279,7 @@ export async function buildSnapshot(options = {}) {
     recentDays,
     pending,
     approvals,
-    replyDrafts: normalizeReplyDrafts(replyDraftsDoc.value),
+    replyDrafts: normalizeReplyDrafts(replyDraftsDoc.value, threads),
     agentAudit,
     contacts: contacts.slice(-80).reverse(),
   }
@@ -1314,9 +1314,26 @@ const APPROVAL_STATUS_ORDER = { approved: 0, pending: 1, failed: 2, sent: 3, ski
 
 // 「该你回」的回复草稿：由 boss_reply.py 预生成（dsh headless），面板只读 + 可编辑；
 // 用户点「发送」后写指令文件，runner 下一轮走同一条发件箱。
-export function normalizeReplyDrafts(doc) {
+export function normalizeReplyDrafts(doc, threads = []) {
+  // 只有「对方最后发言 + 面板判定为待我处理」的会话才展示自动草稿。
+  // 拒信/系统附件卡/面试邀请/已结束/等对方/可静默 一律不展示，避免用户一键发错。
+  const REPLY_STATES = new Set(['待你决定', '待回复'])
+  const byCompany = new Map()
+  for (const t of threads) {
+    const c = String(t?.company ?? '').trim()
+    if (c) byCompany.set(c, t)
+  }
   const items = (doc?.items ?? [])
-    .filter((it) => it && it.company && it.draft)
+    .filter((it) => {
+      if (!it || !it.company || !it.draft) return false
+      const t = byCompany.get(String(it.company))
+      if (!t) return false
+      if (String(t.lastFrom ?? '') !== '对方') return false
+      if (!REPLY_STATES.has(String(t.state ?? ''))) return false
+      // 草稿必须对应当前这一条消息（stamp = 时间|末条前40字）；消息一变旧草稿就作废。
+      const cur = `${t.time || ''}|${String(t.last || '').slice(0, 40)}`
+      return String(it.stamp ?? '') === cur
+    })
     .map((it) => ({
       company: String(it.company),
       name: it.name ?? '',
@@ -1337,6 +1354,36 @@ export async function queueReply(company, text, options = {}) {
   if (!name) throw operationError('missing_company', '缺少公司名')
   if (!msg) throw operationError('empty_reply', '回复内容是空的')
   if (msg.length > 300) throw operationError('reply_too_long', '回复超过 300 字')
+  // 二次校验：弹窗可能是旧的。发之前再看一眼会话是否仍该我回。
+  // threads 文件读不到时跳过（不误伤）；文件存在但会话不匹配就拒绝。
+  const dataDir = options.dataDir || DEFAULT_DATA_DIR
+  const threadsFile = path.join(dataDir, 'boss_threads.json')
+  let threadRows = null
+  try {
+    await fs.stat(threadsFile)
+    const td = await readJsonStrict(threadsFile, { rows: [] })
+    threadRows = Array.isArray(td.rows) ? td.rows : []
+  } catch {
+    threadRows = null
+  }
+  if (threadRows) {
+    const row = threadRows.find((r) => String(r?.company ?? '').trim() === name)
+    if (!row) throw operationError('thread_missing', '找不到该会话，可能已结束')
+    if (String(row.lastFrom ?? '') !== '对方') {
+      throw operationError('thread_not_waiting', '对方还没有新消息，不能回复')
+    }
+    const lastText = String(row.full || row.last || '')
+    if (
+      REJ.test(lastText) ||
+      /取消了?面试|面试(已)?取消|取消原因|您的附件简历|附件简历请求已发送|对方已(同意|查看).{0,8}附件简历/.test(lastText)
+    ) {
+      throw operationError('thread_closed', '该会话已结束或为系统消息，不能回复')
+    }
+    if (options.stamp) {
+      const cur = `${row.time || ''}|${String(row.last || '').slice(0, 40)}`
+      if (String(options.stamp) !== cur) throw operationError('thread_stale', '会话已更新，请刷新后再发')
+    }
+  }
   const file = options.replyCmdFile ?? REPLY_CMD
   const doc = await readJsonStrict(file, { items: [] })
   const items = Array.isArray(doc.items) ? doc.items : []

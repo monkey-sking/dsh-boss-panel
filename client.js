@@ -20,6 +20,18 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
 
+    // 点击概览 KPI 跳到对应区块。面板自己就是滚动容器（.boss-scroll），window.scrollTo 不起作用。
+    // 早先这里直接调 scrollToSection 却从未定义，点击抛 ReferenceError，用户看到的是「点了没反应」。
+    const scrollToSection = (id) => {
+      const root = document.querySelector('.boss-root .boss-scroll')
+      const target = root ? root.querySelector(`#${id}`) : null
+      if (!root || !target) return
+      const top =
+        root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top - 8
+      if (typeof root.scrollTo === 'function') root.scrollTo({ top, behavior: 'smooth' })
+      else root.scrollTop = top
+    }
+
 function createUiKit(React) {
   const h = React.createElement
   const { useState, useEffect, useRef, useCallback } = React
