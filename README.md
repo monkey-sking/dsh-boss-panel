@@ -1,5 +1,9 @@
 # dsh-boss-panel
 
+<!-- badges:start -->
+[![Stars](https://img.shields.io/github/stars/monkey-sking/dsh-boss-panel?style=flat-square)](https://github.com/monkey-sking/dsh-boss-panel/stargazers) [![Forks](https://img.shields.io/github/forks/monkey-sking/dsh-boss-panel?style=flat-square)](https://github.com/monkey-sking/dsh-boss-panel/network/members) [![Last commit](https://img.shields.io/github/last-commit/monkey-sking/dsh-boss-panel?style=flat-square)](https://github.com/monkey-sking/dsh-boss-panel/commits/main)
+<!-- badges:end -->
+
 在 DSH 侧边栏「新会话」下方加一个**招聘**入口，点开是 BOSS 直聘求职面板。
 
 > 截图不入库：面板展示的是本机真实的求职数据（公司名、对接人、状态统计），
